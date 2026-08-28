@@ -28,28 +28,24 @@ pub struct CopyConfig {
 pub struct InstallConfig {
     #[serde(default)]
     pub enabled: bool,
+    /// Custom detection rules, checked *before* the built-ins.
+    /// Add any language here without touching Rust.
     #[serde(default)]
-    pub manager: PackageManager,
+    pub rules: Vec<InstallRule>,
+}
+
+#[derive(Deserialize)]
+pub struct InstallRule {
+    /// File whose presence in the worktree triggers this rule (e.g. "go.mod").
+    pub marker: String,
+    /// Command to run when the marker is found (e.g. ["go", "mod", "download"]).
+    pub command: Vec<String>,
 }
 
 #[derive(Deserialize)]
 pub struct CommandConfig {
     /// argv, e.g. ["cargo", "build"]. First element is the program.
     pub command: Vec<String>,
-}
-
-#[derive(Deserialize, Default, Clone, Copy, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum PackageManager {
-    /// Detect from lockfiles in the worktree.
-    #[default]
-    Auto,
-    Npm,
-    Pnpm,
-    Yarn,
-    Bun,
-    Cargo,
-    None,
 }
 
 /// Load the config: env var first, then walk up from the executable.

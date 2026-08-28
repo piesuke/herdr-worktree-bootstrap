@@ -25,14 +25,22 @@ command = ["cargo", "run", "--release", "--bin", "apply"]
 on = "worktree.created"
 command = ["./target/release/herdr-worktree-init"]
 
-[[panes]]
-id = "board"
-title = "Project board"
-placement = "overlay"
-command = ["herdr-board"]
+[copy]
+enabled = true
+files = [
+  ".env",
+  ".env.local",
+  ".env.development.local",
+]
 
-[[link_handlers]]
-id = "github-issue"
-title = "Open GitHub issue"
-pattern = "^https://github\\.com/[^/]+/[^/]+/(issues|pull)/[0-9]+$"
-action = "apply"
+[install]
+enabled = true
+manager = "auto"
+
+# Arbitrary commands, run in order inside the new worktree.
+# Any non-zero exit aborts the whole bootstrap.
+[[commands]]
+command = ["direnv", "allow"]
+
+[[commands]]
+command = ["cargo", "build"]

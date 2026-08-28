@@ -16,15 +16,16 @@ Herdr (worktree.created)
        │  reads HERDR_PLUGIN_EVENT_JSON (worktree path, branch, source repo_root)
        │  loads <repo>/.herdr/bootstrap.toml
        │
-       ├─ pre hooks      commands run before anything else
+       ├─ git update     bring git up to date (e.g. fetch) — optional
+       ├─ pre hooks      commands run before copy/install
        ├─ copy           <repo>/<file>  ->  <worktree>/<file>
        ├─ install        detect package manager from lockfiles, install
        └─ post hooks     commands run after copy + install
 ```
 
-Lifecycle order: **pre → copy → install → post**. Any non-zero exit aborts the
-whole bootstrap (fail-fast). If a repo has no `.herdr/bootstrap.toml`, the
-plugin does nothing.
+Lifecycle order: **git update → pre → copy → install → post**. Any non-zero
+exit aborts the whole bootstrap (fail-fast). If a repo has no
+`.herdr/bootstrap.toml`, the plugin does nothing.
 
 ## Setup
 
@@ -60,6 +61,20 @@ See [`examples/bootstrap.toml`](examples/bootstrap.toml) for the full schema.
 
 The config file lives at `.herdr/bootstrap.toml` in each repository.
 
+### `[git]` — update git first
+
+Runs before everything else. Handy so a new worktree starts from the latest
+remote state.
+
+```toml
+[git]
+update = true
+# command = ["git", "fetch", "--all", "--prune"]   # default; override as needed
+```
+
+Set `update = true` to run the update; `command` overrides the default
+`git fetch --all --prune` (e.g. `["git", "pull", "--ff-only"]`).
+
 ### `[copy]` — copy files into the worktree
 
 Copies files from the source repo into the new worktree. Useful for gitignored
@@ -69,20 +84,30 @@ source files are skipped, not errors.
 ```toml
 [copy]
 enabled = true
-files = [".env", ".env.local", ".env.development.local"]
+# files = [".env", ".env.local"]   # omit to use the defaults below
 ```
+
+Omit `files` to copy the built-in default env-file list:
+
+```
+.env  .env.local  .env.development  .env.development.local
+.env.test.local  .env.production.local
+```
+
+Set `files` explicitly to override it.
 
 ### `[install]` — install dependencies
 
 Detects the package manager from lockfiles/manifests present in the worktree
-and runs the matching install command. The first matching marker wins.
+and runs the matching install command. The first matching marker wins; a
+`*.ext` marker matches any file with that extension.
 
 ```toml
 [install]
 enabled = true
 ```
 
-Built-in detection (checked in this order):
+Built-in detection covers the major languages (checked in this order):
 
 | Language      | Marker file           | Command                                 |
 | ------------- | --------------------- | --------------------------------------- |
@@ -90,20 +115,38 @@ Built-in detection (checked in this order):
 | JS/TS         | `pnpm-lock.yaml`      | `pnpm install --frozen-lockfile`        |
 | JS/TS         | `yarn.lock`           | `yarn install --frozen-lockfile`        |
 | JS/TS         | `package-lock.json`   | `npm ci`                                |
-| JS/TS         | `package.json`        | `npm install`                           |
 | Deno          | `deno.lock`           | `deno install`                          |
+| JS/TS         | `package.json`        | `npm install`                           |
 | Rust          | `Cargo.toml`          | `cargo fetch`                           |
 | Go            | `go.mod`              | `go mod download`                       |
 | Python        | `uv.lock`             | `uv sync`                               |
 | Python        | `poetry.lock`         | `poetry install`                        |
 | Python        | `Pipfile.lock`        | `pipenv install --dev`                  |
 | Python        | `requirements.txt`    | `pip install -r requirements.txt`       |
-| Ruby          | `Gemfile.lock`        | `bundle install`                        |
+| Ruby          | `Gemfile`             | `bundle install`                        |
 | PHP           | `composer.json`       | `composer install`                      |
-| Java/Kotlin   | `pom.xml`             | `mvn install -DskipTests`               |
-| Java/Kotlin   | `build.gradle`        | `gradle build -x test`                  |
-| Elixir        | `mix.exs`             | `mix deps.get`                          |
+| Java          | `pom.xml`             | `mvn install -DskipTests`               |
+| Kotlin/Gradle | `build.gradle.kts`    | `gradle build -x test`                  |
+| Java/Gradle   | `build.gradle`        | `gradle build -x test`                  |
+| Scala         | `build.sbt`           | `sbt update`                            |
+| C#/.NET       | `*.sln`               | `dotnet restore`                        |
+| C#/.NET       | `*.csproj`            | `dotnet restore`                        |
+| C/C++         | `vcpkg.json`          | `vcpkg install`                         |
+| C/C++         | `conanfile.txt`       | `conan install .`                       |
+| C/C++         | `conanfile.py`        | `conan install .`                       |
+| Swift         | `Package.swift`       | `swift package resolve`                 |
+| Obj-C/Swift   | `Podfile`             | `pod install`                           |
 | Dart/Flutter  | `pubspec.yaml`        | `dart pub get`                          |
+| Elixir        | `mix.exs`             | `mix deps.get`                          |
+| Erlang        | `rebar.config`        | `rebar3 get-deps`                       |
+| Haskell       | `stack.yaml`          | `stack build --only-dependencies`       |
+| Haskell       | `cabal.project`       | `cabal build --only-dependencies`       |
+| R             | `renv.lock`           | `Rscript -e 'renv::restore(...)'`       |
+| Perl          | `cpanfile`            | `cpanm --installdeps .`                 |
+| Clojure       | `deps.edn`            | `clojure -P`                            |
+| Clojure       | `project.clj`         | `lein deps`                             |
+| Julia         | `Project.toml`        | `julia --project -e 'Pkg.instantiate()'`|
+| Crystal       | `shard.yml`           | `shards install`                        |
 
 **Custom rules** are checked *before* the built-ins, so they can add a language
 or override one:

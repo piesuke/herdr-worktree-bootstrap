@@ -3,27 +3,35 @@
 # Place this at `.herdr/bootstrap.toml` in your repository. When the
 # WorktreeBootstrap plugin creates a new worktree of this repo, it runs:
 #
-#     pre hooks -> copy -> install -> post hooks
+#     git update -> pre hooks -> copy -> install -> post hooks
 #
 # Any non-zero exit aborts the whole bootstrap. If this file is absent, the
 # plugin does nothing.
+
+# Bring git up to date before anything else (runs before the pre hooks).
+[git]
+update = true
+# Override the command if you want more than a fetch. Default shown below.
+# command = ["git", "fetch", "--all", "--prune"]
 
 # Copy files from the source repo into the new worktree (e.g. gitignored env
 # files that a fresh checkout won't have).
 [copy]
 enabled = true
-files = [
-  ".env",
-  ".env.local",
-  ".env.development.local",
-]
+# Omit `files` to use the built-in default list:
+#   .env, .env.local, .env.development, .env.development.local,
+#   .env.test.local, .env.production.local
+# Or set it explicitly to override (missing files are skipped, not errors):
+# files = [".env", ".env.local"]
 
 # Install dependencies. Detection is automatic from lockfiles/manifests and
-# covers node / rust / go / python / ruby / php / java / elixir / dart.
+# covers the major languages out of the box (node, rust, go, python, ruby, php,
+# java/kotlin/scala, c#/.net, c/c++, swift, dart, elixir, erlang, haskell, r,
+# perl, clojure, julia, crystal). See the README for the full table.
 [install]
 enabled = true
-# Custom rules are checked before the built-ins, so they can add a language
-# or override one. First marker present in the worktree wins.
+# Custom rules are checked before the built-ins, so they can add a language or
+# override one. First matching marker wins; `*.ext` matches by extension.
 # [[install.rules]]
 # marker = "flake.nix"
 # command = ["nix", "develop", "--command", "true"]
@@ -34,7 +42,7 @@ enabled = true
 
 # pre: before copy and install (e.g. tool setup, private-registry login).
 [[hooks.pre]]
-command = ["git", "fetch"]
+command = ["mise", "install"]
 
 # post: after copy and install (e.g. env setup, codegen, build).
 [[hooks.post]]

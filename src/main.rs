@@ -33,7 +33,12 @@ fn main() -> Result<()> {
     let config_dir = source.as_deref().unwrap_or(worktree);
     let config = config::load(config_dir).context("failed to load bootstrap config")?;
 
-    // Pre hooks: run first, before anything else.
+    // Phase 0: bring git up to date, before anything else runs.
+    if config.git.update {
+        bootstrap::git_update(worktree, config.git.command.as_deref())?;
+    }
+
+    // Pre hooks: run before copy and install.
     bootstrap::run_hooks(worktree, &config.hooks.pre)?;
 
     // Phase 1: copy files (e.g. .env) from the source repo into the worktree.
@@ -41,7 +46,7 @@ fn main() -> Result<()> {
         let src = source
             .as_deref()
             .context("copy is enabled but the event has no source repo_root")?;
-        bootstrap::copy_files(src, worktree, &config.copy.files)?;
+        bootstrap::copy_files(src, worktree, config.copy.files.as_deref())?;
     }
 
     // Phase 2: install dependencies inside the worktree.

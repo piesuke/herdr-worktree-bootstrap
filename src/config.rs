@@ -10,6 +10,9 @@ pub const CONFIG_PATH: &str = ".herdr/bootstrap.toml";
 
 #[derive(Deserialize, Default)]
 pub struct Config {
+    /// Update git (e.g. fetch) before anything else.
+    #[serde(default)]
+    pub git: GitConfig,
     #[serde(default)]
     pub copy: CopyConfig,
     #[serde(default)]
@@ -17,6 +20,16 @@ pub struct Config {
     /// Commands run before/after the copy + install phases.
     #[serde(default)]
     pub hooks: Hooks,
+}
+
+#[derive(Deserialize, Default)]
+pub struct GitConfig {
+    /// Bring git up to date before the pre hooks run.
+    #[serde(default)]
+    pub update: bool,
+    /// Override the update command. Defaults to `git fetch --all --prune`.
+    #[serde(default)]
+    pub command: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -33,8 +46,10 @@ pub struct Hooks {
 pub struct CopyConfig {
     #[serde(default)]
     pub enabled: bool,
+    /// Files to copy. Omit to use the built-in default env-file list;
+    /// set to an explicit list (possibly empty) to override it.
     #[serde(default)]
-    pub files: Vec<String>,
+    pub files: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]

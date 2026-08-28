@@ -1,0 +1,10 @@
+[package]
+name = "herdr-worktree-bootstrap"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[[bin]]
+name = "herdr-worktree-bootstrap"
+path = "main.rs"

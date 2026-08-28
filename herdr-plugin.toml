@@ -1,0 +1,38 @@
+id = "piesuke.herdr.worktree.bootstrap"
+name = "WorktreeBootstrap"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "Apply project layouts"
+platforms = ["linux", "macos", "windows"]
+
+[[build]]
+command = ["cargo", "fetch"]
+
+[[build]]
+command = ["cargo", "build", "--release"]
+platforms = ["linux", "macos"]
+
+[[startup]]
+command = ["cargo", "run", "--release", "--bin", "restore"]
+
+[[actions]]
+id = "apply"
+title = "Apply layout"
+contexts = ["workspace"]
+command = ["cargo", "run", "--release", "--bin", "apply"]
+
+[[events]]
+on = "worktree.created"
+command = ["./target/release/herdr-worktree-init"]
+
+[[panes]]
+id = "board"
+title = "Project board"
+placement = "overlay"
+command = ["herdr-board"]
+
+[[link_handlers]]
+id = "github-issue"
+title = "Open GitHub issue"
+pattern = "^https://github\\.com/[^/]+/[^/]+/(issues|pull)/[0-9]+$"
+action = "apply"

@@ -1,9 +1,12 @@
-//! Plugin config, read from `herdr-plugin.toml`.
+//! Per-repo bootstrap config, read from `.herdr/bootstrap.toml` in the repo.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
+
+/// Path of the config file, relative to the repo/worktree root.
+pub const CONFIG_PATH: &str = ".herdr/bootstrap.toml";
 
 #[derive(Deserialize, Default)]
 pub struct Config {
@@ -11,9 +14,19 @@ pub struct Config {
     pub copy: CopyConfig,
     #[serde(default)]
     pub install: InstallConfig,
-    /// Arbitrary commands to run in the new worktree, in order.
+    /// Commands run before/after the copy + install phases.
     #[serde(default)]
-    pub commands: Vec<CommandConfig>,
+    pub hooks: Hooks,
+}
+
+#[derive(Deserialize, Default)]
+pub struct Hooks {
+    /// Run first, before copy and install.
+    #[serde(default)]
+    pub pre: Vec<CommandConfig>,
+    /// Run last, after copy and install.
+    #[serde(default)]
+    pub post: Vec<CommandConfig>,
 }
 
 #[derive(Deserialize, Default)]
@@ -48,37 +61,18 @@ pub struct CommandConfig {
     pub command: Vec<String>,
 }
 
-/// Load the config: env var first, then walk up from the executable.
-pub fn load() -> Result<Config> {
-    let path = find().context("could not locate herdr-plugin.toml")?;
+/// Load the repo's `.herdr/bootstrap.toml`. Each repo configures its own
+/// bootstrap. A missing file is not an error — it just means "do nothing".
+pub fn load(repo: &Path) -> Result<Config> {
+    let path = repo.join(CONFIG_PATH);
+    if !path.is_file() {
+        println!("[bootstrap] no {}, nothing to do", path.display());
+        return Ok(Config::default());
+    }
     println!("[bootstrap] config:   {}", path.display());
     let text =
         std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     let config: Config =
         toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
     Ok(config)
-}
-
-fn find() -> Option<PathBuf> {
-    // 1. env override(s) pointing at the plugin dir.
-    for var in ["HERDR_PLUGIN_DIR", "HERDR_PLUGIN_ROOT"] {
-        if let Ok(dir) = std::env::var(var) {
-            let candidate = Path::new(&dir).join("herdr-plugin.toml");
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    // 2. walk up from the executable location.
-    if let Ok(exe) = std::env::current_exe() {
-        for ancestor in exe.ancestors() {
-            let candidate = ancestor.join("herdr-plugin.toml");
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    // 3. fall back to the current working directory.
-    let cwd = Path::new("herdr-plugin.toml");
-    cwd.is_file().then(|| cwd.to_path_buf())
 }

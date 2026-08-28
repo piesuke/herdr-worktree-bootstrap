@@ -1,0 +1,44 @@
+# Per-repo worktree bootstrap config.
+#
+# Place this at `.herdr/bootstrap.toml` in your repository. When the
+# WorktreeBootstrap plugin creates a new worktree of this repo, it runs:
+#
+#     pre hooks -> copy -> install -> post hooks
+#
+# Any non-zero exit aborts the whole bootstrap. If this file is absent, the
+# plugin does nothing.
+
+# Copy files from the source repo into the new worktree (e.g. gitignored env
+# files that a fresh checkout won't have).
+[copy]
+enabled = true
+files = [
+  ".env",
+  ".env.local",
+  ".env.development.local",
+]
+
+# Install dependencies. Detection is automatic from lockfiles/manifests and
+# covers node / rust / go / python / ruby / php / java / elixir / dart.
+[install]
+enabled = true
+# Custom rules are checked before the built-ins, so they can add a language
+# or override one. First marker present in the worktree wins.
+# [[install.rules]]
+# marker = "flake.nix"
+# command = ["nix", "develop", "--command", "true"]
+
+# Hooks are arbitrary commands run inside the new worktree, in order.
+# Note: these are NOT run through a shell, so `&&`, pipes, `$VARS`, and
+# redirects don't work — wrap them yourself with ["sh", "-c", "..."].
+
+# pre: before copy and install (e.g. tool setup, private-registry login).
+[[hooks.pre]]
+command = ["git", "fetch"]
+
+# post: after copy and install (e.g. env setup, codegen, build).
+[[hooks.post]]
+command = ["direnv", "allow"]
+
+[[hooks.post]]
+command = ["sh", "-c", "npm run codegen && npm run build"]

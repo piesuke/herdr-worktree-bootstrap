@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
-use crate::config::InstallRule;
+use crate::config::{CommandConfig, InstallRule};
 
 /// Built-in detection rules, checked *after* any user-defined rules.
 /// The first marker present in the worktree wins, so more specific lockfiles
@@ -78,6 +78,14 @@ pub fn install_deps(worktree: &Path, rules: &[InstallRule]) -> Result<()> {
         }
     }
     println!("[install] no matching install rule, skipping");
+    Ok(())
+}
+
+/// Run a list of hook commands in order. Any non-zero exit aborts.
+pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<()> {
+    for hook in hooks {
+        run_command(worktree, &hook.command)?;
+    }
     Ok(())
 }
 

@@ -21,31 +21,9 @@ title = "Apply layout"
 contexts = ["workspace"]
 command = ["cargo", "run", "--release", "--bin", "apply"]
 
+# On worktree.created, run the bootstrap binary. It reads per-repo settings
+# (copy / install / hooks) from `.herdr/bootstrap.toml` inside each repo — see
+# examples/bootstrap.toml for the schema.
 [[events]]
 on = "worktree.created"
 command = ["./target/release/herdr-worktree-init"]
-
-[copy]
-enabled = true
-files = [
-  ".env",
-  ".env.local",
-  ".env.development.local",
-]
-
-[install]
-enabled = true
-# Built-in detection covers node / rust / go / python / ruby / php / java /
-# elixir / dart out of the box. Add custom rules for anything else — they are
-# checked before the built-ins, so they can also override one.
-# [[install.rules]]
-# marker = "flake.nix"
-# command = ["nix", "develop", "--command", "true"]
-
-# Arbitrary commands, run in order inside the new worktree.
-# Any non-zero exit aborts the whole bootstrap.
-[[commands]]
-command = ["direnv", "allow"]
-
-[[commands]]
-command = ["cargo", "build"]

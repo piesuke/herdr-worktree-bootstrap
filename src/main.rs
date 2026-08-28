@@ -28,8 +28,15 @@ fn main() -> Result<()> {
         println!("[bootstrap] source:   {}", src.display());
     }
 
-    let config = config::load().context("failed to load plugin config")?;
+    // Config is owned by the repo: read `.herdr/bootstrap.toml` from the source
+    // repo (falls back to the new worktree, which has the same committed copy).
+    let config_dir = source.as_deref().unwrap_or(worktree);
+    let config = config::load(config_dir).context("failed to load bootstrap config")?;
 
+    // Pre hooks: run first, before anything else.
+    bootstrap::run_hooks(worktree, &config.hooks.pre)?;
+
+    // Phase 1: copy files (e.g. .env) from the source repo into the worktree.
     if config.copy.enabled {
         let src = source
             .as_deref()
@@ -37,13 +44,13 @@ fn main() -> Result<()> {
         bootstrap::copy_files(src, worktree, &config.copy.files)?;
     }
 
+    // Phase 2: install dependencies inside the worktree.
     if config.install.enabled {
         bootstrap::install_deps(worktree, &config.install.rules)?;
     }
 
-    for cmd in &config.commands {
-        bootstrap::run_command(worktree, &cmd.command)?;
-    }
+    // Post hooks: run last, after copy and install.
+    bootstrap::run_hooks(worktree, &config.hooks.post)?;
 
     println!("[bootstrap] done");
     Ok(())

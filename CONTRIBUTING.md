@@ -92,3 +92,39 @@ in the changelog and in the PR description.
 Any schema change also needs both examples updated —
 `examples/worktree-bootstrap.toml` and `examples/worktree-bootstrap.yaml` are
 parsed by the test suite and asserted to be equivalent, so they cannot drift.
+
+Note it in `CHANGELOG.md` under **Unreleased** in the same PR, while you still
+remember why.
+
+## Releasing (maintainers)
+
+Pushing a `v*` tag is the whole release. `.github/workflows/release.yml` refuses
+to publish unless the tag, `Cargo.toml`, and `herdr-plugin.toml` all name the
+same version and the changelog has a section for it — so the order below
+matters.
+
+1. **Rename the changelog section.** `## [Unreleased]` → `## [0.2.0] - 2026-09-15`,
+   and add a fresh empty `## [Unreleased]` above it. This becomes the release
+   body verbatim; the workflow fails if the section is empty.
+2. **Bump the version in both manifests** — `Cargo.toml` and
+   `herdr-plugin.toml`. `tests/manifest.rs` catches it if you do only one.
+3. **Run `cargo build`** so `Cargo.lock` picks up the new version, and commit it.
+   CI runs `--locked` and will fail on a stale lockfile.
+4. Merge to `main`, then:
+
+   ```sh
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+The workflow then re-runs the suite against the tagged commit on both platforms
+and creates the GitHub release. A version with a `-` in it (`v0.2.0-rc.1`) is
+published as a prerelease automatically.
+
+No binaries are attached: herdr installs from source and runs the manifest's own
+`cargo build --release`, so the release is a changelog entry and an installable
+ref, nothing more.
+
+**If the tag was wrong**, delete it (`git push --delete origin v0.2.0`), fix, and
+re-tag — but only before the release is published. After that, ship a new
+patch version instead.

@@ -1,0 +1,113 @@
+name: Release
+
+# Tagging is the release trigger. Everything below exists because a tag is a
+# fourth, independent claim about the version — `tests/manifest.rs` ties
+# Cargo.toml to herdr-plugin.toml, but nothing watches the tag, and a tag cannot
+# be meaningfully moved once people have fetched it.
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  verify:
+    name: verify ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Both files are read with the same grep: the first `version = "..."` line.
+      # `min_herdr_version` in the plugin manifest does not match `^version `.
+      - name: The tag and both manifests must name the same version
+        run: |
+          set -euo pipefail
+          version_of() { grep -m1 -E '^version = ' "$1" | sed -E 's/.*"(.*)".*/\1/'; }
+
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_version="$(version_of Cargo.toml)"
+          plugin_version="$(version_of herdr-plugin.toml)"
+
+          echo "tag=$tag cargo=$cargo_version plugin=$plugin_version"
+          if [ "$tag" != "$cargo_version" ] || [ "$tag" != "$plugin_version" ]; then
+            echo "::error::tag $tag, Cargo.toml $cargo_version, herdr-plugin.toml $plugin_version — bump all three together"
+            exit 1
+          fi
+
+      # The release body comes from the changelog, so an empty section means the
+      # release would ship with no notes. Fail here instead, while the tag can
+      # still be deleted and re-pushed.
+      - name: Extract the changelog section for this version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          # Stop at the next heading, or at the link-reference block that sits
+          # below every section — without the second rule the oldest version's
+          # notes would swallow `[Unreleased]: https://...` and friends.
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { found = 1; next }
+            found && /^## \[/        { exit }
+            found && /^\[[^]]+\]: /  { exit }
+            found                    { print }
+          ' CHANGELOG.md > release-notes.md
+
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::CHANGELOG.md has no content under '## [$version]' — rename the Unreleased section before tagging"
+            exit 1
+          fi
+          cat release-notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  # herdr builds the plugin from source on the user's machine, so a broken tag
+  # breaks every install of it. Re-run the suite against the exact tagged commit
+  # rather than trusting that it is still the one CI saw on main.
+  test:
+    name: test (${{ matrix.os }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked
+      - run: cargo test --all-features --locked
+
+  release:
+    name: publish the GitHub release
+    needs: [verify, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      # No binaries are attached on purpose: herdr installs from source and runs
+      # the manifest's own `cargo build --release`, so a prebuilt artifact here
+      # would be one nothing consumes.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          prerelease=""
+          case "$version" in *-*) prerelease="--prerelease" ;; esac
+
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag \
+            $prerelease

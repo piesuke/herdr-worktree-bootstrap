@@ -59,6 +59,8 @@ command = ["direnv", "allow"]
 - [Security note](#security-note)
 - [License](#license)
 
+Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
 ## How it works
 
 ```

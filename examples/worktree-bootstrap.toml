@@ -1,6 +1,6 @@
 # Per-repo worktree bootstrap config.
 #
-# Place this at `.herdr/bootstrap.toml` in your repository. When the
+# Place this at `.herdr/worktree-bootstrap.toml` in your repository. When the
 # WorktreeBootstrap plugin creates a new worktree of this repo, it runs:
 #
 #     git update -> pre hooks -> copy -> install -> post hooks

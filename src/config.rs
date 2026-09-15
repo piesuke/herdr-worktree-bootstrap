@@ -1,4 +1,5 @@
-//! Per-repo bootstrap config, read from `.herdr/bootstrap.toml` in the repo.
+//! Per-repo bootstrap config, read from `.herdr/worktree-bootstrap.toml` in the
+//! repo.
 
 use std::path::Path;
 
@@ -8,10 +9,14 @@ use serde::Deserialize;
 /// Config file candidates, relative to the repo/worktree root, in priority
 /// order. TOML and YAML are both accepted — pick whichever you prefer; the
 /// schema is identical. The first file that exists wins.
+///
+/// The name is qualified with `worktree-` because `.herdr/` is a namespace
+/// shared by every herdr plugin: a bare `bootstrap.toml` is exactly the name a
+/// different plugin would also reach for.
 pub const CONFIG_PATHS: &[&str] = &[
-    ".herdr/bootstrap.toml",
-    ".herdr/bootstrap.yaml",
-    ".herdr/bootstrap.yml",
+    ".herdr/worktree-bootstrap.toml",
+    ".herdr/worktree-bootstrap.yaml",
+    ".herdr/worktree-bootstrap.yml",
 ];
 
 /// Every config struct denies unknown fields: a typo like `pattern` for
@@ -101,7 +106,7 @@ pub struct CommandConfig {
     pub command: Vec<String>,
 }
 
-/// Load the repo's `.herdr/bootstrap.{toml,yaml,yml}`. Each repo configures its
+/// Load the repo's `.herdr/worktree-bootstrap.{toml,yaml,yml}`. Each repo configures its
 /// own bootstrap. A missing file is not an error — it just means "do nothing".
 /// TOML and YAML are parsed from the same struct, so the format is chosen by
 /// the file extension and nothing else changes.
@@ -112,7 +117,7 @@ pub fn load(repo: &Path) -> Result<Config> {
         .find(|path| path.is_file())
     else {
         println!(
-            "[bootstrap] no .herdr/bootstrap.{{toml,yaml,yml}} in {}, nothing to do",
+            "[bootstrap] no .herdr/worktree-bootstrap.{{toml,yaml,yml}} in {}, nothing to do",
             repo.display()
         );
         return Ok(Config::default());

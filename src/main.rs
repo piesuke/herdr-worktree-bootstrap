@@ -28,7 +28,7 @@ fn main() -> Result<()> {
         println!("[bootstrap] source:   {}", src.display());
     }
 
-    // Config is owned by the repo: read `.herdr/bootstrap.toml` from the source
+    // Config is owned by the repo: read `.herdr/worktree-bootstrap.toml` from the source
     // repo (falls back to the new worktree, which has the same committed copy).
     let config_dir = source.as_deref().unwrap_or(worktree);
     let config = config::load(config_dir).context("failed to load bootstrap config")?;

@@ -13,8 +13,8 @@ command = ["cargo", "build", "--release"]
 platforms = ["linux", "macos"]
 
 # On worktree.created, run the bootstrap binary. It reads per-repo settings
-# (copy / install / hooks) from `.herdr/bootstrap.toml` inside each repo — see
-# examples/bootstrap.toml for the schema.
+# (copy / install / hooks) from `.herdr/worktree-bootstrap.toml` inside each repo
+# — see examples/worktree-bootstrap.toml for the schema.
 [[events]]
 on = "worktree.created"
 command = ["./target/release/herdr-worktree-init"]

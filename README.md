@@ -5,7 +5,7 @@ worktree: it copies gitignored files (like `.env`), installs dependencies, and
 runs your own pre/post commands — automatically, on `worktree.created`.
 
 The plugin itself is generic. **Each repository configures its own bootstrap**
-via a committed `.herdr/bootstrap.toml`, so different projects can copy
+via a committed `.herdr/worktree-bootstrap.toml`, so different projects can copy
 different files, install with different tools, and run different hooks.
 
 ## How it works
@@ -14,7 +14,7 @@ different files, install with different tools, and run different hooks.
 Herdr (worktree.created)
   └─ ./target/release/herdr-worktree-init
        │  reads HERDR_PLUGIN_EVENT_JSON (worktree path, branch, source repo_root)
-       │  loads <repo>/.herdr/bootstrap.toml
+       │  loads <repo>/.herdr/worktree-bootstrap.toml
        │
        ├─ git update     bring git up to date (e.g. fetch) — optional
        ├─ pre hooks      commands run before copy/install
@@ -34,14 +34,21 @@ whichever you prefer. The plugin looks for these files in order and uses the
 first that exists:
 
 ```
-.herdr/bootstrap.toml   (checked first)
-.herdr/bootstrap.yaml
-.herdr/bootstrap.yml
+.herdr/worktree-bootstrap.toml   (checked first)
+.herdr/worktree-bootstrap.yaml
+.herdr/worktree-bootstrap.yml
 ```
 
 The reference below shows TOML. See
-[`examples/bootstrap.yaml`](examples/bootstrap.yaml) for the identical config in
-YAML.
+[`examples/worktree-bootstrap.yaml`](examples/worktree-bootstrap.yaml) for the
+identical config in YAML.
+
+**Prefer TOML**, including in non-Rust repos. The schemas are identical, but
+several fields in this one take values starting with `*` (`patterns`, and
+`*.ext` install markers), and in YAML a leading `*` is alias syntax — an
+unquoted `marker: *.csproj` is a parse error. TOML also reports unknown-key
+errors with the offending line. Never commit both files: `.toml` wins and the
+other is silently ignored.
 
 **Unknown keys are an error.** A typo like `pattern` instead of `patterns`
 aborts the bootstrap with a message naming the offending key and the valid ones,
@@ -98,7 +105,7 @@ worktree, for every repo. What it *does* is decided per repository.
 
 ### 1. Add a config to a repo
 
-Nothing happens until a repo has one. Commit `.herdr/bootstrap.toml` to each
+Nothing happens until a repo has one. Commit `.herdr/worktree-bootstrap.toml` to each
 repo you want bootstrapped:
 
 ```toml
@@ -113,7 +120,7 @@ enabled = true
 command = ["direnv", "allow"]
 ```
 
-See [`examples/bootstrap.toml`](examples/bootstrap.toml) for the full schema and
+See [`examples/worktree-bootstrap.toml`](examples/worktree-bootstrap.toml) for the full schema and
 the [configuration reference](#configuration-reference) below for each section.
 
 ### 2. Create a worktree
@@ -139,7 +146,7 @@ things you'll see there:
 
 | Output | Meaning |
 | ------ | ------- |
-| `no .herdr/bootstrap.{toml,yaml,yml} in <repo>, nothing to do` | The repo has no config — step 1 was skipped |
+| `no .herdr/worktree-bootstrap.{toml,yaml,yml} in <repo>, nothing to do` | The repo has no config — step 1 was skipped |
 | `[copy] no gitignored files matched [...]` | Discovery ran but found nothing — check the files are actually gitignored |
 | `[install] no matching install rule, skipping` | No known marker file in the worktree root |
 | `unknown field ...` | A typo in the config; the bootstrap aborted |
@@ -155,7 +162,7 @@ herdr plugin uninstall piesuke.herdr.worktree.bootstrap # remove an installed co
 
 ## Configuration reference
 
-The config file lives at `.herdr/bootstrap.toml` (or `.yaml`/`.yml`) in each
+The config file lives at `.herdr/worktree-bootstrap.toml` (or `.yaml`/`.yml`) in each
 repository.
 
 ### `[git]` — update git first
@@ -296,18 +303,19 @@ command = ["direnv", "allow"]
 ├── Cargo.toml
 ├── herdr-plugin.toml        # plugin manifest (generic, no per-repo settings)
 ├── examples/
-│   └── bootstrap.toml       # sample .herdr/bootstrap.toml for consumers
+│   ├── worktree-bootstrap.toml   # sample config for consumers to copy
+│   └── worktree-bootstrap.yaml   # the same config in YAML
 └── src/
     ├── main.rs              # entry point: parse event, orchestrate phases
     ├── event.rs             # HERDR_PLUGIN_EVENT_JSON types
-    ├── config.rs            # .herdr/bootstrap.toml types + loading
+    ├── config.rs            # .herdr/worktree-bootstrap.toml types + loading
     └── bootstrap.rs         # copy / install / hook execution
 ```
 
 ## Security note
 
 Because hooks and install commands come from the repo's committed
-`.herdr/bootstrap.toml`, **anyone who can push to a repo can run arbitrary
+`.herdr/worktree-bootstrap.toml`, **anyone who can push to a repo can run arbitrary
 commands** when a worktree of it is created — the same trust model as
 `.git/hooks` or CI config. Only enable automatic bootstrap for repositories you
 trust.

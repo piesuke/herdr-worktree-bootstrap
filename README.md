@@ -1,4 +1,15 @@
+<div align="center">
+
 # Herdr Plugin For worktree created
+
+**Copy the gitignored files, install the dependencies, run the hooks — the moment a worktree is born.**
+
+[![CI](https://github.com/piesuke/herdr-worktree-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/piesuke/herdr-worktree-bootstrap/actions/workflows/ci.yml)
+![herdr 0.7.0+](https://img.shields.io/badge/herdr-0.7.0%2B-2b7489)
+![platforms: linux | macos](https://img.shields.io/badge/platforms-linux%20%7C%20macos-lightgrey)
+![rust edition 2024](https://img.shields.io/badge/rust-edition%202024-dea584)
+
+</div>
 
 A [Herdr](https://github.com/herdrdev/herdr) plugin that bootstraps a freshly created git
 worktree: it copies gitignored files (like `.env`), installs dependencies, and
@@ -7,6 +18,44 @@ runs your own pre/post commands — automatically, on `worktree.created`.
 The plugin itself is generic. **Each repository configures its own bootstrap**
 via a committed `.herdr/worktree-bootstrap.toml`, so different projects can copy
 different files, install with different tools, and run different hooks.
+
+```toml
+# .herdr/worktree-bootstrap.toml — commit this to any repo you want bootstrapped
+[copy]
+enabled = true          # bring .env and friends into the new worktree
+
+[install]
+enabled = true          # detect the package manager, install
+
+[[hooks.post]]
+command = ["direnv", "allow"]
+```
+
+## Features
+
+- **Copies what a fresh checkout is missing** — env files and other gitignored
+  paths, found recursively via git itself, so nested `.gitignore`s and negations
+  just work. Monorepo-safe.
+- **Detects the package manager** — 37 built-in markers, from `bun.lockb` to
+  `shard.yml`, with per-repo rules that override them.
+- **Runs your own commands** — `pre`/`post` hooks, each optionally scoped to one
+  package of a monorepo.
+- **Configured per repository** — TOML or YAML, committed alongside the code, so
+  every clone and every teammate gets the same bootstrap.
+- **Loud about typos** — unknown config keys are an error, not a silent default.
+- **Fail-fast** — the first non-zero exit aborts the run, instead of leaving you
+  to discover it later.
+
+## Table of contents
+
+- [How it works](#how-it-works)
+- [Installing the plugin](#installing-the-plugin)
+- [Using it](#using-it)
+- [Configuration reference](#configuration-reference)
+- [Project layout](#project-layout)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Security note](#security-note)
 
 ## How it works
 
@@ -148,7 +197,7 @@ things you'll see there:
 | ------ | ------- |
 | `no .herdr/worktree-bootstrap.{toml,yaml,yml} in <repo>, nothing to do` | The repo has no config — step 1 was skipped |
 | `[copy] no gitignored files matched [...]` | Discovery ran but found nothing — check the files are actually gitignored |
-| `[install] no matching install rule, skipping` | No known marker file in the worktree root |
+| `[install] no matching install rule in <dir>, skipping` | No known marker file in that directory |
 | `unknown field ...` | A typo in the config; the bootstrap aborted |
 
 ### Managing the plugin
@@ -378,6 +427,20 @@ behaviour under test.
 
 **Linux and macOS only.** The integration tests shell out to `sh`, and the
 manifest declares those two platforms.
+
+## Contributing
+
+Issues and pull requests are welcome. CI runs `cargo fmt --check`, `cargo clippy
+-- -D warnings`, and the test suite on Linux and macOS, so the three commands
+above are the whole gate — if they pass locally, they pass there.
+
+Two things worth knowing before you open a PR:
+
+- **Bump both manifests together.** The version lives in `Cargo.toml` *and*
+  `herdr-plugin.toml`; `tests/manifest.rs` fails if they disagree.
+- **Adding an install rule?** Add it to `BUILTIN_RULES` in `src/bootstrap.rs`,
+  to the table above, and to the detection tests — order matters, because the
+  first matching marker wins.
 
 ## Security note
 

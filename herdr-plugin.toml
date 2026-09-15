@@ -3,14 +3,13 @@ name = "WorktreeBootstrap"
 version = "0.1.0"
 min_herdr_version = "0.7.0"
 description = "Bootstrap a new worktree: copy gitignored files, install deps, run hooks"
-platforms = ["linux", "macos", "windows"]
+platforms = ["linux", "macos"]
 
 [[build]]
 command = ["cargo", "fetch"]
 
 [[build]]
 command = ["cargo", "build", "--release"]
-platforms = ["linux", "macos"]
 
 # On worktree.created, run the bootstrap binary. It reads per-repo settings
 # (copy / install / hooks) from `.herdr/worktree-bootstrap.toml` inside each repo

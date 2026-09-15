@@ -139,7 +139,7 @@ pub fn load(repo: &Path) -> Result<Config> {
 
     let config: Config = match path.extension().and_then(|ext| ext.to_str()) {
         Some("yaml") | Some("yml") => {
-            serde_yaml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?
+            serde_yaml_ng::from_str(&text).with_context(|| format!("parsing {}", path.display()))?
         }
         _ => toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?,
     };
@@ -275,7 +275,7 @@ mod tests {
             command = ["direnv", "allow"]
             "#,
         );
-        let from_yaml: Config = serde_yaml::from_str(
+        let from_yaml: Config = serde_yaml_ng::from_str(
             r#"
 copy:
   enabled: true
@@ -292,6 +292,6 @@ hooks:
 
     #[test]
     fn yaml_also_rejects_unknown_keys() {
-        assert!(serde_yaml::from_str::<Config>("copy:\n  pattern: [\".env\"]\n").is_err());
+        assert!(serde_yaml_ng::from_str::<Config>("copy:\n  pattern: [\".env\"]\n").is_err());
     }
 }

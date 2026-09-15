@@ -1,0 +1,77 @@
+name: Bug report
+description: Something the plugin did that it shouldn't have
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The plugin's stdout is captured by herdr, not printed to your terminal.
+        Before filing, grab the log — it usually contains the answer:
+
+        ```sh
+        herdr plugin log list --plugin piesuke.herdr.worktree.bootstrap --limit 5
+        ```
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Your `.herdr/worktree-bootstrap.toml`
+      description: >
+        The config from the repo being bootstrapped. Redact secret *values*, but
+        please keep the keys and structure — most reports come down to these.
+      render: toml
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Plugin log output
+      description: >
+        From `herdr plugin log list` above — include `exit_code`, `stdout`, and
+        `stderr`.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: layout
+    attributes:
+      label: Repo layout
+      description: >
+        Monorepo or single package? Where do the relevant files sit? e.g.
+        "monorepo, `.env` lives in `apps/web/`, root has pnpm-lock.yaml"
+    validations:
+      required: false
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Plugin version, herdr version (`herdr --version`), OS, and `rustc --version`.
+      placeholder: "plugin 0.1.0, herdr 0.7.2, macOS 15.6, rustc 1.92.0"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: >
+            If files weren't copied — I confirmed they are actually gitignored
+            (`git check-ignore -v <path>` in the source repo). Committed files
+            are never copied, by design.
+          required: false
+        - label: >
+            I have only one of `.toml` / `.yaml` / `.yml` in `.herdr/` — if both
+            exist, `.toml` wins and the other is silently ignored.
+          required: false

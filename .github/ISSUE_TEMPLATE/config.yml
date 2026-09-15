@@ -1,0 +1,13 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/piesuke/herdr-worktree-bootstrap/security/advisories/new
+    about: >
+      Report privately, not as an issue. Read SECURITY.md first — arbitrary
+      command execution from a repo's own committed config is the documented
+      design, not a vulnerability.
+  - name: Herdr itself
+    url: https://github.com/herdrdev/herdr/issues
+    about: >
+      Plugin not firing at all, `herdr plugin install` failing, or anything
+      about worktree creation itself belongs upstream.

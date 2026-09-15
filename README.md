@@ -432,9 +432,9 @@ manifest declares those two platforms.
 
 ## Contributing
 
-Issues and pull requests are welcome. CI runs `cargo fmt --check`, `cargo clippy
--- -D warnings`, and the test suite on Linux and macOS, so the three commands
-above are the whole gate — if they pass locally, they pass there.
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+CI runs `cargo fmt --check`, `cargo clippy -- -D warnings`, and the test suite
+on Linux and macOS, so the three commands above are the whole gate.
 
 Two things worth knowing before you open a PR:
 
@@ -451,6 +451,9 @@ Because hooks and install commands come from the repo's committed
 commands** when a worktree of it is created — the same trust model as
 `.git/hooks` or CI config. Only enable automatic bootstrap for repositories you
 trust.
+
+See [SECURITY.md](SECURITY.md) for the full trust model and how to report a
+vulnerability.
 
 ## License
 

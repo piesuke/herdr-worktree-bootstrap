@@ -1,0 +1,59 @@
+name: Add a built-in install rule
+description: A language or package manager the plugin doesn't detect yet
+labels: ["install-rule", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You can already do this yourself without waiting for a release —
+        `[[install.rules]]` in your own config is checked *before* the built-ins:
+
+        ```toml
+        [[install.rules]]
+        marker = "flake.nix"
+        command = ["nix", "develop", "--command", "true"]
+        ```
+
+        This issue is for making it a default for everyone.
+
+  - type: input
+    id: language
+    attributes:
+      label: Language / ecosystem
+      placeholder: "Zig"
+    validations:
+      required: true
+
+  - type: input
+    id: marker
+    attributes:
+      label: Marker file
+      description: >
+        The file whose presence means "this is that kind of project". A `*.ext`
+        marker matches any file with that extension.
+      placeholder: "build.zig.zon"
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: Install command
+      description: >
+        As an argv list — it is exec'd directly, not through a shell, so no `&&`
+        or pipes. It should be non-interactive and safe to run on a fresh
+        checkout.
+      placeholder: '["zig", "build", "--fetch"]'
+    validations:
+      required: true
+
+  - type: textarea
+    id: ordering
+    attributes:
+      label: Ordering
+      description: >
+        The first matching marker wins. Does this marker coexist with one
+        already in the table — e.g. a lockfile that sits next to a manifest we
+        already detect? If so, say which side it belongs on and why.
+    validations:
+      required: false

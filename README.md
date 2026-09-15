@@ -43,6 +43,11 @@ The reference below shows TOML. See
 [`examples/bootstrap.yaml`](examples/bootstrap.yaml) for the identical config in
 YAML.
 
+**Unknown keys are an error.** A typo like `pattern` instead of `patterns`
+aborts the bootstrap with a message naming the offending key and the valid ones,
+rather than silently falling back to the default — a config that looks right but
+does nothing is the most expensive failure mode here.
+
 ## Setup
 
 ### 1. Build the plugin

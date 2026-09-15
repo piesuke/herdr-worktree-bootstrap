@@ -14,7 +14,11 @@ pub const CONFIG_PATHS: &[&str] = &[
     ".herdr/bootstrap.yml",
 ];
 
+/// Every config struct denies unknown fields: a typo like `pattern` for
+/// `patterns` would otherwise deserialize to the default and silently do the
+/// wrong thing, which is the most expensive kind of config bug to debug.
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// Update git (e.g. fetch) before anything else.
     #[serde(default)]
@@ -29,6 +33,7 @@ pub struct Config {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct GitConfig {
     /// Bring git up to date before the pre hooks run.
     #[serde(default)]
@@ -39,6 +44,7 @@ pub struct GitConfig {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Run first, before copy and install.
     #[serde(default)]
@@ -49,6 +55,7 @@ pub struct Hooks {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CopyConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -68,6 +75,7 @@ pub struct CopyConfig {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub struct InstallConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -78,6 +86,7 @@ pub struct InstallConfig {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InstallRule {
     /// File whose presence in the worktree triggers this rule (e.g. "go.mod").
     pub marker: String,
@@ -86,6 +95,7 @@ pub struct InstallRule {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CommandConfig {
     /// argv, e.g. ["cargo", "build"]. First element is the program.
     pub command: Vec<String>,

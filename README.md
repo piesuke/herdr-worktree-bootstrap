@@ -224,6 +224,27 @@ and runs the matching install command. The first matching marker wins; a
 enabled = true
 ```
 
+**Detection is not recursive.** By default only the worktree root is examined,
+and exactly one install command runs. For a monorepo, list the packages to
+install in `dirs` — detection then runs independently in each, so several
+install commands can run:
+
+```toml
+[install]
+enabled = true
+dirs = ["apps/web", "services/api", "ml"]   # relative to the worktree root
+```
+
+A JS monorepo with a root `package.json` and lockfile needs no `dirs`: the root
+install already handles workspaces. `dirs` is for the polyglot case — a node app
+next to a go service next to a python package — which would otherwise install
+nothing at all.
+
+Paths are not globbed (`apps/*` won't expand), and a listed directory that
+doesn't exist aborts the bootstrap before anything runs, rather than being
+skipped — a typo there means the config is wrong, and installing nothing
+silently is exactly what this option exists to prevent.
+
 Built-in detection covers the major languages (checked in this order):
 
 | Language      | Marker file           | Command                                 |
@@ -277,7 +298,8 @@ command = ["nix", "develop", "--command", "true"]
 ### `[[hooks.pre]]` / `[[hooks.post]]` — arbitrary commands
 
 Commands run inside the new worktree, in order. `pre` runs before copy/install;
-`post` runs after.
+`post` runs after. Add `dir` to run a hook in one package of a monorepo instead
+of at the root:
 
 ```toml
 [[hooks.pre]]
@@ -285,7 +307,14 @@ command = ["mise", "install"]
 
 [[hooks.post]]
 command = ["direnv", "allow"]
+
+[[hooks.post]]
+command = ["npm", "run", "codegen"]
+dir = "apps/web"                      # relative to the worktree root
 ```
+
+A `dir` that doesn't exist aborts with an explicit error, rather than surfacing
+as a confusing "failed to spawn" for the program.
 
 > **Not run through a shell.** Each command is exec'd directly, so `&&`, pipes,
 > `$VARS`, redirects, and globs do **not** work. Wrap them yourself:

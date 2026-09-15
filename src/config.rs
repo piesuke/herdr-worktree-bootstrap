@@ -84,6 +84,12 @@ pub struct CopyConfig {
 pub struct InstallConfig {
     #[serde(default)]
     pub enabled: bool,
+    /// Directories to install in, relative to the worktree root. Detection runs
+    /// independently in each one, so a polyglot monorepo can install several
+    /// packages. Omit for `["."]` — the worktree root only. A listed directory
+    /// that doesn't exist is an error, not a skip.
+    #[serde(default)]
+    pub dirs: Option<Vec<String>>,
     /// Custom detection rules, checked *before* the built-ins.
     /// Add any language here without touching Rust.
     #[serde(default)]
@@ -104,6 +110,10 @@ pub struct InstallRule {
 pub struct CommandConfig {
     /// argv, e.g. ["cargo", "build"]. First element is the program.
     pub command: Vec<String>,
+    /// Working directory, relative to the worktree root. Omit to run at the
+    /// root. Lets a hook target one package of a monorepo.
+    #[serde(default)]
+    pub dir: Option<String>,
 }
 
 /// Load the repo's `.herdr/worktree-bootstrap.{toml,yaml,yml}`. Each repo configures its

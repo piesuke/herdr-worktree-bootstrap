@@ -204,22 +204,54 @@ fn glob_match(pattern: &str, name: &str) -> bool {
 
 /// Install dependencies inside the worktree.
 ///
-/// User-defined `rules` are checked first (so they can add languages or
-/// override a built-in), then the built-in table. The first marker that
-/// exists in the worktree wins.
-pub fn install_deps(worktree: &Path, rules: &[InstallRule]) -> Result<()> {
+/// Detection runs independently in each of `dirs` (relative to the worktree
+/// root, defaulting to the root itself), so a polyglot monorepo can install a
+/// node app and a go service in one bootstrap. Within a directory the first
+/// matching marker wins and exactly one command runs there.
+///
+/// A listed directory that doesn't exist aborts: `dirs` describes committed
+/// repo structure, so a missing one means the config is wrong, and silently
+/// installing nothing is the failure mode this option exists to fix.
+pub fn install_deps(worktree: &Path, rules: &[InstallRule], dirs: Option<&[String]>) -> Result<()> {
+    let default: Vec<String>;
+    let dirs: &[String] = match dirs {
+        Some(dirs) => dirs,
+        None => {
+            default = vec![".".to_string()];
+            &default
+        }
+    };
+
+    // Validate every directory before installing anything: a typo in the last
+    // entry should not leave the earlier packages half-installed.
+    for dir in dirs {
+        if !worktree.join(dir).is_dir() {
+            bail!("install dir `{dir}` does not exist in the worktree");
+        }
+    }
+
+    for dir in dirs {
+        install_in_dir(&worktree.join(dir), dir, rules)?;
+    }
+    Ok(())
+}
+
+/// Detect and install in a single directory. User-defined `rules` are checked
+/// first (so they can add languages or override a built-in), then the built-in
+/// table.
+fn install_in_dir(base: &Path, label: &str, rules: &[InstallRule]) -> Result<()> {
     for rule in rules {
-        if marker_matches(worktree, &rule.marker) {
-            return run_command(worktree, &rule.command);
+        if marker_matches(base, &rule.marker) {
+            return run_command(base, &rule.command);
         }
     }
     for (marker, argv) in BUILTIN_RULES {
-        if marker_matches(worktree, marker) {
+        if marker_matches(base, marker) {
             let owned: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
-            return run_command(worktree, &owned);
+            return run_command(base, &owned);
         }
     }
-    println!("[install] no matching install rule, skipping");
+    println!("[install] no matching install rule in {label}, skipping");
     Ok(())
 }
 
@@ -238,24 +270,38 @@ fn marker_matches(worktree: &Path, marker: &str) -> bool {
     }
 }
 
-/// Run a list of hook commands in order. Any non-zero exit aborts.
+/// Run a list of hook commands in order. Any non-zero exit aborts. A hook's
+/// `dir` selects a subdirectory of the worktree to run in (default: the root).
 pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<()> {
     for hook in hooks {
-        run_command(worktree, &hook.command)?;
+        let cwd = match &hook.dir {
+            Some(dir) => worktree.join(dir),
+            None => worktree.to_path_buf(),
+        };
+        run_command(&cwd, &hook.command)?;
     }
     Ok(())
 }
 
-/// Run one command inside the worktree. Non-zero exit aborts (returns Err).
-pub fn run_command(worktree: &Path, argv: &[String]) -> Result<()> {
+/// Run one command in `cwd`. Non-zero exit aborts (returns Err).
+pub fn run_command(cwd: &Path, argv: &[String]) -> Result<()> {
     let Some((program, rest)) = argv.split_first() else {
         bail!("empty command in config");
     };
+    // Checked up front: a bad `dir` would otherwise surface as a spawn failure
+    // indistinguishable from "the program isn't installed".
+    if !cwd.is_dir() {
+        bail!(
+            "working directory does not exist: {} (running `{}`)",
+            cwd.display(),
+            argv.join(" ")
+        );
+    }
     println!("[run] {}", argv.join(" "));
 
     let status = Command::new(program)
         .args(rest)
-        .current_dir(worktree)
+        .current_dir(cwd)
         .status()
         .with_context(|| format!("spawning `{program}`"))?;
 

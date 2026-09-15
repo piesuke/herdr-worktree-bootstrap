@@ -56,7 +56,11 @@ fn main() -> Result<()> {
 
     // Phase 2: install dependencies inside the worktree.
     if config.install.enabled {
-        bootstrap::install_deps(worktree, &config.install.rules)?;
+        bootstrap::install_deps(
+            worktree,
+            &config.install.rules,
+            config.install.dirs.as_deref(),
+        )?;
     }
 
     // Post hooks: run last, after copy and install.

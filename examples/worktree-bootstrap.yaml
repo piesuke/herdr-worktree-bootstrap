@@ -37,6 +37,12 @@ copy:
 # perl, clojure, julia, crystal). See the README for the full table.
 install:
   enabled: true
+  # Detection is NOT recursive: by default only the worktree root is checked and
+  # exactly one install command runs. In a polyglot monorepo, list each package —
+  # detection then runs independently in every directory. Not globbed, and a
+  # directory that doesn't exist aborts the bootstrap.
+  # dirs: ["apps/web", "services/api", "ml"]
+  #
   # Custom rules are checked before the built-ins, so they can add a language or
   # override one. First matching marker wins; `*.ext` matches by extension.
   # rules:
@@ -54,3 +60,6 @@ hooks:
   post:
     - command: ["direnv", "allow"]
     - command: ["sh", "-c", "npm run codegen && npm run build"]
+    # `dir` runs a hook in one package of a monorepo instead of at the root.
+    - command: ["npm", "run", "codegen"]
+      dir: "apps/web"

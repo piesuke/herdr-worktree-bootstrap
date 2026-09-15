@@ -10,6 +10,12 @@ serde_json = "1"
 serde_yaml = "0.9"
 toml = "0.8"
 
+[dev-dependencies]
+tempfile = "3"
+
+# The library target is auto-discovered from src/lib.rs as
+# `herdr_worktree_bootstrap`; the binary below is a thin wrapper over it so the
+# bootstrap lifecycle stays testable from `tests/`.
 [[bin]]
 name = "herdr-worktree-init"
 path = "src/main.rs"

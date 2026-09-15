@@ -46,6 +46,8 @@ command = ["direnv", "allow"]
 - **Loud about typos** — unknown config keys are an error, not a silent default.
 - **Fail-fast** — the first non-zero exit aborts the run, instead of leaving you
   to discover it later.
+- **Tells you what it did** — a herdr toast when the worktree is ready, or when
+  the bootstrap aborted and why.
 
 ## Table of contents
 
@@ -73,12 +75,14 @@ Herdr (worktree.created)
        ├─ pre hooks      commands run before copy/install
        ├─ copy           <repo>/<file>  ->  <worktree>/<file>
        ├─ install        detect package manager from lockfiles, install
-       └─ post hooks     commands run after copy + install
+       ├─ post hooks     commands run after copy + install
+       └─ notify         herdr toast: what ran, or what failed
 ```
 
 Lifecycle order: **git update → pre → copy → install → post**. Any non-zero
 exit aborts the whole bootstrap (fail-fast). If a repo has no config file, the
-plugin does nothing.
+plugin does nothing. Whatever the outcome, the run ends with a toast — see
+[`[notify]`](#notify--announce-the-result) for the herdr setting it needs.
 
 ### Config format: TOML or YAML
 
@@ -379,6 +383,61 @@ as a confusing "failed to spawn" for the program.
 >
 > The program is resolved via `PATH`; if it isn't found the bootstrap aborts.
 
+### `[notify]` — announce the result
+
+herdr captures this plugin's stdout instead of printing it, so without a
+notification a run is invisible unless you go and read
+[the logs](#3-read-the-logs). When the bootstrap finishes, the plugin posts a
+herdr toast summarising it:
+
+```
+Bootstrap done · worktree/green-harbor-ad23
+  updated git
+  copied 3 files
+  pnpm install --frozen-lockfile
+  uv sync
+```
+
+```
+Bootstrap failed · worktree/green-harbor-ad23
+  `pnpm install --frozen-lockfile` exited with exit status: 1
+```
+
+This is the **only section that is on by default**, because a half-bootstrapped
+worktree you were never told about is the failure this plugin is supposed to
+prevent. Turn it down with:
+
+```toml
+[notify]
+# when = "always"    # default: after every run in which a phase was enabled
+# when = "failure"   # only when the bootstrap aborts
+# when = "never"     # stay silent
+```
+
+A run where no phase was enabled (a repo with no config) never toasts, whatever
+`when` says.
+
+> **herdr must be set to deliver toasts.** They are off in herdr's own default
+> config, so until you set `[ui.toast] delivery` in *herdr's* `config.toml`
+> nothing appears and `herdr notification show` quietly answers
+> `"shown": false` at exit code 0:
+>
+> ```toml
+> # ~/.config/herdr/config.toml
+> [ui.toast]
+> delivery = "herdr"     # in-app toast; or "terminal" / "system" for desktop
+> ```
+>
+> herdr can still decline a toast after that — `[ui.toast]` is *background*
+> notification delivery, so it suppresses popups for whatever you are already
+> looking at. Either way the plugin log names the reason it got back, rather
+> than leaving you to wonder whether the notification was ever sent:
+>
+> ```
+> [notify] herdr did not show the toast (reason: disabled) — set `[ui.toast] delivery` in herdr's config.toml to see it
+> [notify] herdr did not show the toast (reason: busy)
+> ```
+
 ## Project layout
 
 ```
@@ -392,7 +451,8 @@ as a confusing "failed to spawn" for the program.
 │   ├── lib.rs               # run(): the bootstrap lifecycle
 │   ├── event.rs             # HERDR_PLUGIN_EVENT_JSON types
 │   ├── config.rs            # .herdr/worktree-bootstrap.toml types + loading
-│   └── bootstrap.rs         # copy / install / hook execution
+│   ├── bootstrap.rs         # copy / install / hook execution
+│   └── notify.rs            # the end-of-run herdr toast
 └── tests/
     ├── common/mod.rs        # temp dirs and throwaway git repos
     ├── config_load.rs       # which config file wins; the examples still parse

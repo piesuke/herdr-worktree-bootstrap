@@ -31,6 +31,12 @@ changes are called out under **Changed** or **Removed**, never **Added**.
   in the repo being bootstrapped. Unknown keys are an error rather than a silent
   default.
 - Fail-fast: the first non-zero exit aborts the remaining phases.
+- `[notify]`: a herdr toast when the bootstrap finishes, listing what each phase
+  did, or the command that failed. Unlike every other section it defaults to on
+  (`when = "always"`, also `"failure"` and `"never"`), because herdr captures the
+  plugin's stdout rather than printing it — without a toast a run is invisible
+  unless you go and read `herdr plugin log list`. Requires `[ui.toast] delivery`
+  in herdr's own config; the plugin log says so when herdr suppresses a toast.
 
 ### Changed
 

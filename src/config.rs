@@ -35,6 +35,35 @@ pub struct Config {
     /// Commands run before/after the copy + install phases.
     #[serde(default)]
     pub hooks: Hooks,
+    /// Whether to announce the result as a herdr toast.
+    #[serde(default)]
+    pub notify: NotifyConfig,
+}
+
+#[derive(Deserialize, Default, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct NotifyConfig {
+    #[serde(default)]
+    pub when: NotifyWhen,
+}
+
+/// When to post a herdr toast summarising the run.
+///
+/// Unlike every other section this defaults to on, because the cost of being
+/// wrong is asymmetric: herdr captures the plugin's stdout instead of printing
+/// it, so a run nobody is told about is a run nobody can see. It cannot
+/// surprise anyone either — herdr suppresses toasts entirely unless the user
+/// has already set `[ui.toast] delivery` in their own config.
+#[derive(Deserialize, Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum NotifyWhen {
+    /// Stay silent whatever happens.
+    Never,
+    /// Only when the bootstrap aborts.
+    Failure,
+    /// After every run in which at least one phase was enabled.
+    #[default]
+    Always,
 }
 
 #[derive(Deserialize, Default, Debug, PartialEq)]
@@ -175,6 +204,32 @@ mod tests {
             toml_config("[copy]\nenabled = true\nfiles = []").copy.files,
             Some(vec![])
         );
+    }
+
+    /// Every *phase* is opt-in, but notification is opt-out: see [`NotifyWhen`]
+    /// for why. Pinned here because it is the one place the config breaks its
+    /// own "an empty config does nothing" rule.
+    #[test]
+    fn notification_is_the_one_section_that_defaults_to_on() {
+        assert_eq!(toml_config("").notify.when, NotifyWhen::Always);
+        assert_eq!(
+            toml_config("[notify]\nwhen = \"failure\"").notify.when,
+            NotifyWhen::Failure
+        );
+        assert_eq!(
+            toml_config("[notify]\nwhen = \"never\"").notify.when,
+            NotifyWhen::Never
+        );
+    }
+
+    #[test]
+    fn an_unknown_notify_mode_is_rejected() {
+        let err = toml::from_str::<Config>("[notify]\nwhen = \"sometimes\"")
+            .expect_err("only the three documented modes are valid");
+        let msg = err.to_string();
+        for mode in ["never", "failure", "always"] {
+            assert!(msg.contains(mode), "error should list `{mode}`, got: {msg}");
+        }
     }
 
     #[test]

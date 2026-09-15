@@ -58,7 +58,7 @@ does nothing is the most expensive failure mode here.
 ## Installing the plugin
 
 Requires **herdr 0.7.0+** (`min_herdr_version` in the manifest) and a Rust
-toolchain to build the binary.
+toolchain to build the binary. Linux and macOS only.
 
 ### Install from GitHub
 
@@ -334,12 +334,42 @@ as a confusing "failed to spawn" for the program.
 ├── examples/
 │   ├── worktree-bootstrap.toml   # sample config for consumers to copy
 │   └── worktree-bootstrap.yaml   # the same config in YAML
-└── src/
-    ├── main.rs              # entry point: parse event, orchestrate phases
-    ├── event.rs             # HERDR_PLUGIN_EVENT_JSON types
-    ├── config.rs            # .herdr/worktree-bootstrap.toml types + loading
-    └── bootstrap.rs         # copy / install / hook execution
+├── src/
+│   ├── main.rs              # binary: parse the event, then hand off to run()
+│   ├── lib.rs               # run(): the bootstrap lifecycle
+│   ├── event.rs             # HERDR_PLUGIN_EVENT_JSON types
+│   ├── config.rs            # .herdr/worktree-bootstrap.toml types + loading
+│   └── bootstrap.rs         # copy / install / hook execution
+└── tests/
+    ├── common/mod.rs        # temp dirs and throwaway git repos
+    ├── config_load.rs       # which config file wins; the examples still parse
+    ├── copy.rs              # discovery against real git repositories
+    └── lifecycle.rs         # phase order and fail-fast
 ```
+
+The crate is a library plus a thin binary. Everything that decides *what
+happens* lives in the library, so the lifecycle can be tested without herdr in
+the loop; `main.rs` only reads `HERDR_PLUGIN_EVENT_JSON`, loads the repo's
+config, and calls `run()`.
+
+## Development
+
+```sh
+cargo test           # unit + integration
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all
+```
+
+Unit tests live beside the code they cover, in `#[cfg(test)] mod tests` at the
+bottom of each module — that's what gives them access to the private pieces
+worth pinning, like the glob matcher and the install-detection table.
+Integration tests in `tests/` drive the public API instead, and they don't mock:
+the copy tests create real git repositories and the lifecycle tests run real
+shell hooks, because delegating to `git ls-files` and exec'ing commands *is* the
+behaviour under test.
+
+**Linux and macOS only.** The integration tests shell out to `sh`, and the
+manifest declares those two platforms.
 
 ## Security note
 

@@ -1,6 +1,6 @@
 # WorktreeBootstrap
 
-A [Herdr](https://github.com/) plugin that bootstraps a freshly created git
+A [Herdr](https://github.com/herdrdev/herdr) plugin that bootstraps a freshly created git
 worktree: it copies gitignored files (like `.env`), installs dependencies, and
 runs your own pre/post commands — automatically, on `worktree.created`.
 
@@ -48,21 +48,58 @@ aborts the bootstrap with a message naming the offending key and the valid ones,
 rather than silently falling back to the default — a config that looks right but
 does nothing is the most expensive failure mode here.
 
-## Setup
+## Installing the plugin
 
-### 1. Build the plugin
+Requires **herdr 0.7.0+** (`min_herdr_version` in the manifest) and a Rust
+toolchain to build the binary.
+
+### Install from GitHub
+
+```sh
+herdr plugin install piesuke/herdr-worktree-bootstrap
+```
+
+### Or link a local checkout (for development)
+
+```sh
+git clone git@github.com:piesuke/herdr-worktree-bootstrap.git
+herdr plugin link ./herdr-worktree-bootstrap        # add --disabled to link without enabling
+```
+
+Either way herdr registers the plugin under the id
+**`piesuke.herdr.worktree.bootstrap`** and records it in
+`~/.config/herdr/plugins.json`.
+
+### Build the binary
+
+The manifest declares the build steps (`cargo fetch`, then
+`cargo build --release`), which produce `./target/release/herdr-worktree-init`
+— the binary `[[events]]` invokes. If that file doesn't exist after installing,
+run the build yourself from the plugin root:
 
 ```sh
 cargo build --release
 ```
 
-This produces `./target/release/herdr-worktree-init`, which
-`herdr-plugin.toml` invokes on `worktree.created`.
+### Verify
 
-### 2. Configure a repository
+```sh
+herdr plugin list
+```
 
-Add `.herdr/bootstrap.toml` to any repo you want bootstrapped. A minimal
-example:
+The entry should show `enabled: true`. Editing `herdr-plugin.toml` afterwards
+does **not** require re-linking — herdr re-reads the manifest from
+`manifest_path` on its own.
+
+## Using it
+
+Once installed, the plugin is entirely passive: it runs whenever herdr creates a
+worktree, for every repo. What it *does* is decided per repository.
+
+### 1. Add a config to a repo
+
+Nothing happens until a repo has one. Commit `.herdr/bootstrap.toml` to each
+repo you want bootstrapped:
 
 ```toml
 [copy]
@@ -76,7 +113,45 @@ enabled = true
 command = ["direnv", "allow"]
 ```
 
-See [`examples/bootstrap.toml`](examples/bootstrap.toml) for the full schema.
+See [`examples/bootstrap.toml`](examples/bootstrap.toml) for the full schema and
+the [configuration reference](#configuration-reference) below for each section.
+
+### 2. Create a worktree
+
+Create a worktree of that repo in herdr as usual. The plugin fires on
+`worktree.created` and runs the phases in order.
+
+> There is currently **no way to trigger a run manually** — creating a worktree
+> is the only entry point. Iterating on a config means creating (and deleting) a
+> throwaway worktree.
+
+### 3. Read the logs
+
+The plugin's stdout is captured by herdr, not printed to your terminal. To see
+what a run did:
+
+```sh
+herdr plugin log list --plugin piesuke.herdr.worktree.bootstrap --limit 5
+```
+
+Each entry carries the `exit_code`, `status`, and full `stdout`/`stderr`. Useful
+things you'll see there:
+
+| Output | Meaning |
+| ------ | ------- |
+| `no .herdr/bootstrap.{toml,yaml,yml} in <repo>, nothing to do` | The repo has no config — step 1 was skipped |
+| `[copy] no gitignored files matched [...]` | Discovery ran but found nothing — check the files are actually gitignored |
+| `[install] no matching install rule, skipping` | No known marker file in the worktree root |
+| `unknown field ...` | A typo in the config; the bootstrap aborted |
+
+### Managing the plugin
+
+```sh
+herdr plugin disable piesuke.herdr.worktree.bootstrap   # stop it firing, keep it registered
+herdr plugin enable  piesuke.herdr.worktree.bootstrap
+herdr plugin unlink  piesuke.herdr.worktree.bootstrap   # remove a linked local checkout
+herdr plugin uninstall piesuke.herdr.worktree.bootstrap # remove an installed copy
+```
 
 ## Configuration reference
 

@@ -1,4 +1,4 @@
-# WorktreeBootstrap
+# Herdr Plugin For worktree created
 
 A [Herdr](https://github.com/herdrdev/herdr) plugin that bootstraps a freshly created git
 worktree: it copies gitignored files (like `.env`), installs dependencies, and
@@ -344,8 +344,16 @@ as a confusing "failed to spawn" for the program.
     ├── common/mod.rs        # temp dirs and throwaway git repos
     ├── config_load.rs       # which config file wins; the examples still parse
     ├── copy.rs              # discovery against real git repositories
-    └── lifecycle.rs         # phase order and fail-fast
+    ├── lifecycle.rs         # phase order and fail-fast
+    └── manifest.rs          # Cargo.toml and herdr-plugin.toml agree
 ```
+
+The two manifests are read by different tools — `Cargo.toml` by cargo,
+`herdr-plugin.toml` by herdr — and neither reads the other, so their overlap
+(the version, the binary's name and path) is hand-maintained and drifts
+silently. `tests/manifest.rs` is the handshake: bump the version in one file
+only, or rename the binary, and CI says so instead of the plugin failing the
+next time herdr fires the event.
 
 The crate is a library plus a thin binary. Everything that decides *what
 happens* lives in the library, so the lifecycle can be tested without herdr in

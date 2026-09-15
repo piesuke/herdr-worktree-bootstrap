@@ -1,12 +1,11 @@
-mod bootstrap;
-mod config;
-mod event;
+//! Entry point: parse the herdr event payload, locate the repo's config, and
+//! hand off to [`herdr_worktree_bootstrap::run`].
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::event::Event;
+use herdr_worktree_bootstrap::{config, event::Event, run};
 
 fn main() -> Result<()> {
     let event_json =
@@ -33,38 +32,7 @@ fn main() -> Result<()> {
     let config_dir = source.as_deref().unwrap_or(worktree);
     let config = config::load(config_dir).context("failed to load bootstrap config")?;
 
-    // Phase 0: bring git up to date, before anything else runs.
-    if config.git.update {
-        bootstrap::git_update(worktree, config.git.command.as_deref())?;
-    }
-
-    // Pre hooks: run before copy and install.
-    bootstrap::run_hooks(worktree, &config.hooks.pre)?;
-
-    // Phase 1: copy files (e.g. .env) from the source repo into the worktree.
-    // With an explicit `files` list we copy exactly those; otherwise we
-    // recursively copy gitignored files matching the env patterns.
-    if config.copy.enabled {
-        let src = source
-            .as_deref()
-            .context("copy is enabled but the event has no source repo_root")?;
-        match config.copy.files.as_deref() {
-            Some(files) => bootstrap::copy_files(src, worktree, files)?,
-            None => bootstrap::copy_gitignored(src, worktree, config.copy.patterns.as_deref())?,
-        }
-    }
-
-    // Phase 2: install dependencies inside the worktree.
-    if config.install.enabled {
-        bootstrap::install_deps(
-            worktree,
-            &config.install.rules,
-            config.install.dirs.as_deref(),
-        )?;
-    }
-
-    // Post hooks: run last, after copy and install.
-    bootstrap::run_hooks(worktree, &config.hooks.post)?;
+    run(worktree, source.as_deref(), &config)?;
 
     println!("[bootstrap] done");
     Ok(())

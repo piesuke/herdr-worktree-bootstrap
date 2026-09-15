@@ -246,23 +246,34 @@ pub fn install_deps(worktree: &Path, rules: &[InstallRule], dirs: Option<&[Strin
     Ok(())
 }
 
-/// Detect and install in a single directory. User-defined `rules` are checked
-/// first (so they can add languages or override a built-in), then the built-in
-/// table.
-fn install_in_dir(base: &Path, label: &str, rules: &[InstallRule]) -> Result<()> {
+/// Decide which install command applies in `base`, without running anything.
+/// User-defined `rules` are checked first (so they can add a language or
+/// override a built-in), then [`BUILTIN_RULES`]; the first matching marker
+/// wins. `None` means nothing matched.
+///
+/// Detection is split from execution so the whole table — and the precedence
+/// between its entries — can be tested without spawning a process.
+fn detect_install(base: &Path, rules: &[InstallRule]) -> Option<Vec<String>> {
     for rule in rules {
         if marker_matches(base, &rule.marker) {
-            return run_command(base, &rule.command);
+            return Some(rule.command.clone());
         }
     }
-    for (marker, argv) in BUILTIN_RULES {
-        if marker_matches(base, marker) {
-            let owned: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
-            return run_command(base, &owned);
+    BUILTIN_RULES
+        .iter()
+        .find(|(marker, _)| marker_matches(base, marker))
+        .map(|(_, argv)| argv.iter().map(|s| s.to_string()).collect())
+}
+
+/// Detect and install in a single directory.
+fn install_in_dir(base: &Path, label: &str, rules: &[InstallRule]) -> Result<()> {
+    match detect_install(base, rules) {
+        Some(argv) => run_command(base, &argv),
+        None => {
+            println!("[install] no matching install rule in {label}, skipping");
+            Ok(())
         }
     }
-    println!("[install] no matching install rule in {label}, skipping");
-    Ok(())
 }
 
 /// Does a marker match in the worktree root? A `*.ext` marker matches any file
@@ -294,7 +305,10 @@ pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<()> {
 }
 
 /// Run one command in `cwd`. Non-zero exit aborts (returns Err).
-pub fn run_command(cwd: &Path, argv: &[String]) -> Result<()> {
+///
+/// Crate-internal: callers outside the library drive the phases through
+/// [`crate::run`], not individual commands.
+pub(crate) fn run_command(cwd: &Path, argv: &[String]) -> Result<()> {
     let Some((program, rest)) = argv.split_first() else {
         bail!("empty command in config");
     };
@@ -319,4 +333,197 @@ pub fn run_command(cwd: &Path, argv: &[String]) -> Result<()> {
         bail!("`{}` exited with {}", argv.join(" "), status);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// A directory containing each of `files` as an empty file.
+    fn dir_with(files: &[&str]) -> TempDir {
+        let dir = tempfile::tempdir().expect("creating tempdir");
+        for name in files {
+            std::fs::write(dir.path().join(name), "").expect("writing marker");
+        }
+        dir
+    }
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn rule(marker: &str, command: &[&str]) -> InstallRule {
+        InstallRule {
+            marker: marker.to_string(),
+            command: argv(command),
+        }
+    }
+
+    #[test]
+    fn glob_matches_literal_names() {
+        assert!(glob_match(".env", ".env"));
+        assert!(!glob_match(".env", ".env.local"));
+        assert!(!glob_match(".env", "env"));
+        assert!(!glob_match(".env", ""));
+    }
+
+    #[test]
+    fn glob_star_matches_any_run_including_empty() {
+        assert!(glob_match("*", ""));
+        assert!(glob_match("*", ".env.production.local"));
+        assert!(glob_match("*.csproj", "App.csproj"));
+        assert!(glob_match("a*c", "ac"));
+        assert!(glob_match("a*c", "abbbc"));
+        assert!(!glob_match("a*c", "ab"));
+    }
+
+    /// The reason [`DEFAULT_ENV_PATTERNS`] needs *both* `.env` and `.env.*`:
+    /// the star can match empty, but the literal dot before it cannot, so
+    /// `.env.*` alone would silently miss a plain `.env`.
+    #[test]
+    fn dotted_glob_does_not_match_the_bare_name() {
+        assert!(glob_match(".env.*", ".env.local"));
+        assert!(glob_match(".env.*", ".env."));
+        assert!(!glob_match(".env.*", ".env"));
+
+        let defaults: Vec<String> = DEFAULT_ENV_PATTERNS.iter().map(|s| s.to_string()).collect();
+        for name in [".env", ".env.local", ".env.production.local"] {
+            assert!(
+                defaults.iter().any(|pat| glob_match(pat, name)),
+                "{name} should match the default env patterns"
+            );
+        }
+        assert!(
+            !defaults.iter().any(|pat| glob_match(pat, "envrc")),
+            "unrelated names should not match the defaults"
+        );
+    }
+
+    #[test]
+    fn marker_matches_exact_filenames() {
+        let dir = dir_with(&["go.mod"]);
+        assert!(marker_matches(dir.path(), "go.mod"));
+        assert!(!marker_matches(dir.path(), "Cargo.toml"));
+    }
+
+    #[test]
+    fn marker_matches_extension_wildcards() {
+        let dir = dir_with(&["App.csproj"]);
+        assert!(marker_matches(dir.path(), "*.csproj"));
+        assert!(!marker_matches(dir.path(), "*.sln"));
+    }
+
+    #[test]
+    fn marker_does_not_match_in_a_missing_directory() {
+        let dir = tempfile::tempdir().expect("creating tempdir");
+        let missing = dir.path().join("nope");
+        assert!(!marker_matches(&missing, "go.mod"));
+        assert!(!marker_matches(&missing, "*.csproj"));
+    }
+
+    #[test]
+    fn detects_nothing_in_an_empty_directory() {
+        let dir = dir_with(&[]);
+        assert_eq!(detect_install(dir.path(), &[]), None);
+    }
+
+    /// Lockfiles precede the generic manifest in [`BUILTIN_RULES`], so a repo
+    /// with both gets the reproducible install rather than a loose one.
+    #[test]
+    fn lockfiles_win_over_the_generic_manifest() {
+        for (files, expected) in [
+            (vec!["package.json"], argv(&["npm", "install"])),
+            (
+                vec!["package-lock.json", "package.json"],
+                argv(&["npm", "ci"]),
+            ),
+            (vec!["bun.lockb", "package.json"], argv(&["bun", "install"])),
+        ] {
+            let dir = dir_with(&files);
+            assert_eq!(
+                detect_install(dir.path(), &[]),
+                Some(expected),
+                "for {files:?}"
+            );
+        }
+    }
+
+    /// Within the JS family the table order is the tiebreak, top to bottom.
+    #[test]
+    fn earlier_builtin_rules_win_ties() {
+        let dir = dir_with(&["pnpm-lock.yaml", "yarn.lock", "package-lock.json"]);
+        assert_eq!(
+            detect_install(dir.path(), &[]),
+            Some(argv(&["pnpm", "install", "--frozen-lockfile"]))
+        );
+    }
+
+    #[test]
+    fn custom_rules_override_builtins() {
+        let dir = dir_with(&["package.json"]);
+        let rules = vec![rule("package.json", &["npm", "install", "--offline"])];
+        assert_eq!(
+            detect_install(dir.path(), &rules),
+            Some(argv(&["npm", "install", "--offline"]))
+        );
+    }
+
+    #[test]
+    fn custom_rules_can_add_an_unknown_language() {
+        let dir = dir_with(&["flake.nix"]);
+        let rules = vec![rule("flake.nix", &["nix", "develop", "--command", "true"])];
+        assert_eq!(
+            detect_install(dir.path(), &rules),
+            Some(argv(&["nix", "develop", "--command", "true"]))
+        );
+        // Without the rule the same directory matches nothing.
+        assert_eq!(detect_install(dir.path(), &[]), None);
+    }
+
+    #[test]
+    fn custom_rules_are_checked_in_order() {
+        let dir = dir_with(&["go.mod", "Cargo.toml"]);
+        let rules = vec![
+            rule("Cargo.toml", &["cargo", "fetch", "--offline"]),
+            rule("go.mod", &["go", "mod", "download"]),
+        ];
+        assert_eq!(
+            detect_install(dir.path(), &rules),
+            Some(argv(&["cargo", "fetch", "--offline"]))
+        );
+    }
+
+    #[test]
+    fn install_dirs_are_validated_before_anything_runs() {
+        let worktree = dir_with(&[]);
+        std::fs::create_dir(worktree.path().join("apps")).expect("creating apps/");
+
+        let dirs = vec!["apps".to_string(), "services".to_string()];
+        let err = install_deps(worktree.path(), &[], Some(&dirs))
+            .expect_err("a missing install dir should abort");
+        assert!(
+            err.to_string().contains("services"),
+            "error should name the missing dir, got: {err}"
+        );
+    }
+
+    #[test]
+    fn empty_commands_are_rejected() {
+        let dir = dir_with(&[]);
+        let err = run_command(dir.path(), &[]).expect_err("an empty argv should be an error");
+        assert!(err.to_string().contains("empty command"), "got: {err}");
+    }
+
+    #[test]
+    fn running_in_a_missing_directory_is_an_error() {
+        let dir = tempfile::tempdir().expect("creating tempdir");
+        let missing = dir.path().join("nope");
+        let err = run_command(&missing, &argv(&["true"]))
+            .expect_err("a missing cwd should abort before spawning");
+        assert!(
+            err.to_string().contains("working directory does not exist"),
+            "got: {err}"
+        );
+    }
 }

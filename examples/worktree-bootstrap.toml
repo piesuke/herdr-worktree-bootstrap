@@ -49,17 +49,17 @@ enabled = true
 # redirects don't work — wrap them yourself with ["sh", "-c", "..."].
 
 # pre: before copy and install (e.g. tool setup, private-registry login).
-[[hooks.pre]]
-command = ["mise", "install"]
+# [[hooks.pre]]
+# command = ["mise", "install"]
 
-# post: after copy and install (e.g. env setup, codegen, build).
-[[hooks.post]]
-command = ["direnv", "allow"]
+# # post: after copy and install (e.g. env setup, codegen, build).
+# [[hooks.post]]
+# command = ["direnv", "allow"]
 
-[[hooks.post]]
-command = ["sh", "-c", "npm run codegen && npm run build"]
+# [[hooks.post]]
+# command = ["sh", "-c", "npm run codegen && npm run build"]
 
-# `dir` runs a hook in one package of a monorepo instead of at the root.
-[[hooks.post]]
-command = ["npm", "run", "codegen"]
-dir = "apps/web"
+# # `dir` runs a hook in one package of a monorepo instead of at the root.
+# [[hooks.post]]
+# command = ["npm", "run", "codegen"]
+# dir = "apps/web"

@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::config::{CommandConfig, InstallRule};
 
@@ -36,7 +36,10 @@ const BUILTIN_RULES: &[(&str, &[&str])] = &[
     ("uv.lock", &["uv", "sync"]),
     ("poetry.lock", &["poetry", "install"]),
     ("Pipfile.lock", &["pipenv", "install", "--dev"]),
-    ("requirements.txt", &["pip", "install", "-r", "requirements.txt"]),
+    (
+        "requirements.txt",
+        &["pip", "install", "-r", "requirements.txt"],
+    ),
     // Ruby
     ("Gemfile", &["bundle", "install"]),
     // PHP
@@ -66,14 +69,20 @@ const BUILTIN_RULES: &[(&str, &[&str])] = &[
     ("stack.yaml", &["stack", "build", "--only-dependencies"]),
     ("cabal.project", &["cabal", "build", "--only-dependencies"]),
     // R
-    ("renv.lock", &["Rscript", "-e", "renv::restore(prompt = FALSE)"]),
+    (
+        "renv.lock",
+        &["Rscript", "-e", "renv::restore(prompt = FALSE)"],
+    ),
     // Perl
     ("cpanfile", &["cpanm", "--installdeps", "."]),
     // Clojure
     ("deps.edn", &["clojure", "-P"]),
     ("project.clj", &["lein", "deps"]),
     // Julia
-    ("Project.toml", &["julia", "--project", "-e", "using Pkg; Pkg.instantiate()"]),
+    (
+        "Project.toml",
+        &["julia", "--project", "-e", "using Pkg; Pkg.instantiate()"],
+    ),
     // Crystal
     ("shard.yml", &["shards", "install"]),
 ];
@@ -182,7 +191,8 @@ pub fn copy_gitignored(source: &Path, worktree: &Path, patterns: Option<&[String
 fn copy_into_worktree(src: &Path, worktree: &Path, rel: &Path) -> Result<()> {
     let dst = worktree.join(rel);
     if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
     }
     std::fs::copy(src, &dst)
         .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;

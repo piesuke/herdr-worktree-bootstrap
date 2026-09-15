@@ -2,6 +2,10 @@
 name = "herdr-worktree-bootstrap"
 version = "0.1.0"
 edition = "2024"
+description = "Bootstrap a new worktree: copy gitignored files, install deps, run hooks"
+license = "MIT"
+repository = "https://github.com/piesuke/herdr-worktree-bootstrap"
+readme = "README.md"
 
 [dependencies]
 anyhow = "1"

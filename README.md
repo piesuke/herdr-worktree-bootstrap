@@ -5,6 +5,7 @@
 **Copy the gitignored files, install the dependencies, run the hooks — the moment a worktree is born.**
 
 [![CI](https://github.com/piesuke/herdr-worktree-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/piesuke/herdr-worktree-bootstrap/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![herdr 0.7.0+](https://img.shields.io/badge/herdr-0.7.0%2B-2b7489)
 ![platforms: linux | macos](https://img.shields.io/badge/platforms-linux%20%7C%20macos-lightgrey)
 ![rust edition 2024](https://img.shields.io/badge/rust-edition%202024-dea584)
@@ -56,6 +57,7 @@ command = ["direnv", "allow"]
 - [Development](#development)
 - [Contributing](#contributing)
 - [Security note](#security-note)
+- [License](#license)
 
 ## How it works
 
@@ -449,3 +451,7 @@ Because hooks and install commands come from the repo's committed
 commands** when a worktree of it is created — the same trust model as
 `.git/hooks` or CI config. Only enable automatic bootstrap for repositories you
 trust.
+
+## License
+
+[MIT](LICENSE) © piesuke

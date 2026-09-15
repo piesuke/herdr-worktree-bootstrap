@@ -113,8 +113,11 @@ fn the_declared_platforms_are_the_ones_ci_covers() {
     assert_eq!(plugin().platforms, ["linux", "macos"]);
 }
 
-/// Cargo.toml has no `description` yet. When one is added — it's needed before
-/// publishing — this stops it diverging from the one herdr shows users.
+/// Two audiences see a description — crates.io readers see Cargo.toml's, herdr
+/// users see the plugin manifest's — and nothing else makes them match.
+///
+/// `description` stays optional here because it is optional to cargo: a fork
+/// that drops it should not fail the suite, only lose the check.
 #[test]
 fn the_descriptions_agree_once_cargo_declares_one() {
     if let Some(description) = cargo().package.description {

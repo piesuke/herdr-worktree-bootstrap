@@ -1,0 +1,54 @@
+# Per-repo worktree bootstrap config (YAML edition).
+#
+# Place this at `.herdr/bootstrap.yaml` (or `.yml`) in your repository. It is
+# the exact same schema as `.herdr/bootstrap.toml` — pick whichever format you
+# prefer. If both exist, the `.toml` wins. When the WorktreeBootstrap plugin
+# creates a new worktree of this repo, it runs:
+#
+#     git update -> pre hooks -> copy -> install -> post hooks
+#
+# Any non-zero exit aborts the whole bootstrap. If no config file is present,
+# the plugin does nothing.
+
+# Bring git up to date before anything else (runs before the pre hooks).
+git:
+  update: true
+  # Override the command if you want more than a fetch. Default shown below.
+  # command: ["git", "fetch", "--all", "--prune"]
+
+# Copy gitignored files (env files, local secrets) that a fresh checkout won't
+# have into the new worktree.
+copy:
+  enabled: true
+  # Default (omit `files`): recursively copy *gitignored* files whose name
+  # matches `patterns` — great for monorepos where env files sit in
+  # subdirectories. Committed files like `.env.example` are never copied
+  # (they aren't gitignored).
+  # patterns: [".env", ".env.*"]   # omit for these env defaults; `*` = any chars
+  #
+  # Or list exact relative paths to copy instead (disables discovery):
+  # files: [".env", "apps/web/.env.local"]
+
+# Install dependencies. Detection is automatic from lockfiles/manifests and
+# covers the major languages out of the box (node, rust, go, python, ruby, php,
+# java/kotlin/scala, c#/.net, c/c++, swift, dart, elixir, erlang, haskell, r,
+# perl, clojure, julia, crystal). See the README for the full table.
+install:
+  enabled: true
+  # Custom rules are checked before the built-ins, so they can add a language or
+  # override one. First matching marker wins; `*.ext` matches by extension.
+  # rules:
+  #   - marker: "flake.nix"
+  #     command: ["nix", "develop", "--command", "true"]
+
+# Hooks are arbitrary commands run inside the new worktree, in order.
+# Note: these are NOT run through a shell, so `&&`, pipes, `$VARS`, and
+# redirects don't work — wrap them yourself with ["sh", "-c", "..."].
+hooks:
+  # pre: before copy and install (e.g. tool setup, private-registry login).
+  pre:
+    - command: ["mise", "install"]
+  # post: after copy and install (e.g. env setup, codegen, build).
+  post:
+    - command: ["direnv", "allow"]
+    - command: ["sh", "-c", "npm run codegen && npm run build"]

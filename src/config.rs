@@ -5,8 +5,14 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-/// Path of the config file, relative to the repo/worktree root.
-pub const CONFIG_PATH: &str = ".herdr/bootstrap.toml";
+/// Config file candidates, relative to the repo/worktree root, in priority
+/// order. TOML and YAML are both accepted — pick whichever you prefer; the
+/// schema is identical. The first file that exists wins.
+pub const CONFIG_PATHS: &[&str] = &[
+    ".herdr/bootstrap.toml",
+    ".herdr/bootstrap.yaml",
+    ".herdr/bootstrap.yml",
+];
 
 #[derive(Deserialize, Default)]
 pub struct Config {
@@ -46,10 +52,19 @@ pub struct Hooks {
 pub struct CopyConfig {
     #[serde(default)]
     pub enabled: bool,
-    /// Files to copy. Omit to use the built-in default env-file list;
-    /// set to an explicit list (possibly empty) to override it.
+    /// Explicit relative paths to copy from the source repo. When set,
+    /// gitignored discovery is disabled and exactly these files are copied
+    /// (missing ones are skipped). Omit to use recursive discovery instead.
     #[serde(default)]
     pub files: Option<Vec<String>>,
+    /// Filename globs used by recursive discovery (only when `files` is
+    /// omitted). Discovery walks the source repo for **gitignored** files whose
+    /// basename matches one of these globs and copies each to the same relative
+    /// path in the worktree. Committed files (e.g. `.env.example`) are never
+    /// copied because they aren't gitignored. Omit for the env-file defaults
+    /// (`.env`, `.env.*`). `*` matches any sequence of characters.
+    #[serde(default)]
+    pub patterns: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Default)]
@@ -76,18 +91,32 @@ pub struct CommandConfig {
     pub command: Vec<String>,
 }
 
-/// Load the repo's `.herdr/bootstrap.toml`. Each repo configures its own
-/// bootstrap. A missing file is not an error — it just means "do nothing".
+/// Load the repo's `.herdr/bootstrap.{toml,yaml,yml}`. Each repo configures its
+/// own bootstrap. A missing file is not an error — it just means "do nothing".
+/// TOML and YAML are parsed from the same struct, so the format is chosen by
+/// the file extension and nothing else changes.
 pub fn load(repo: &Path) -> Result<Config> {
-    let path = repo.join(CONFIG_PATH);
-    if !path.is_file() {
-        println!("[bootstrap] no {}, nothing to do", path.display());
+    let Some(path) = CONFIG_PATHS
+        .iter()
+        .map(|name| repo.join(name))
+        .find(|path| path.is_file())
+    else {
+        println!(
+            "[bootstrap] no .herdr/bootstrap.{{toml,yaml,yml}} in {}, nothing to do",
+            repo.display()
+        );
         return Ok(Config::default());
-    }
+    };
+
     println!("[bootstrap] config:   {}", path.display());
     let text =
         std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-    let config: Config =
-        toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
+
+    let config: Config = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("yaml") | Some("yml") => {
+            serde_yaml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?
+        }
+        _ => toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?,
+    };
     Ok(config)
 }

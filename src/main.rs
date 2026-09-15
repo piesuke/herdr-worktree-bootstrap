@@ -42,11 +42,16 @@ fn main() -> Result<()> {
     bootstrap::run_hooks(worktree, &config.hooks.pre)?;
 
     // Phase 1: copy files (e.g. .env) from the source repo into the worktree.
+    // With an explicit `files` list we copy exactly those; otherwise we
+    // recursively copy gitignored files matching the env patterns.
     if config.copy.enabled {
         let src = source
             .as_deref()
             .context("copy is enabled but the event has no source repo_root")?;
-        bootstrap::copy_files(src, worktree, config.copy.files.as_deref())?;
+        match config.copy.files.as_deref() {
+            Some(files) => bootstrap::copy_files(src, worktree, files)?,
+            None => bootstrap::copy_gitignored(src, worktree, config.copy.patterns.as_deref())?,
+        }
     }
 
     // Phase 2: install dependencies inside the worktree.

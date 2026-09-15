@@ -24,8 +24,24 @@ Herdr (worktree.created)
 ```
 
 Lifecycle order: **git update → pre → copy → install → post**. Any non-zero
-exit aborts the whole bootstrap (fail-fast). If a repo has no
-`.herdr/bootstrap.toml`, the plugin does nothing.
+exit aborts the whole bootstrap (fail-fast). If a repo has no config file, the
+plugin does nothing.
+
+### Config format: TOML or YAML
+
+The config can be written as **either TOML or YAML** — same schema, pick
+whichever you prefer. The plugin looks for these files in order and uses the
+first that exists:
+
+```
+.herdr/bootstrap.toml   (checked first)
+.herdr/bootstrap.yaml
+.herdr/bootstrap.yml
+```
+
+The reference below shows TOML. See
+[`examples/bootstrap.yaml`](examples/bootstrap.yaml) for the identical config in
+YAML.
 
 ## Setup
 
@@ -59,7 +75,8 @@ See [`examples/bootstrap.toml`](examples/bootstrap.toml) for the full schema.
 
 ## Configuration reference
 
-The config file lives at `.herdr/bootstrap.toml` in each repository.
+The config file lives at `.herdr/bootstrap.toml` (or `.yaml`/`.yml`) in each
+repository.
 
 ### `[git]` — update git first
 
@@ -77,24 +94,37 @@ Set `update = true` to run the update; `command` overrides the default
 
 ### `[copy]` — copy files into the worktree
 
-Copies files from the source repo into the new worktree. Useful for gitignored
-files (env files, local secrets) that a fresh checkout won't have. Missing
-source files are skipped, not errors.
+Brings gitignored files (env files, local secrets) that a fresh checkout won't
+have into the new worktree. There are two modes.
+
+**Discovery mode (default).** Omit `files`, and the plugin recursively finds
+**gitignored** files in the source repo whose name matches `patterns` and copies
+each to the same relative path in the worktree:
 
 ```toml
 [copy]
 enabled = true
-# files = [".env", ".env.local"]   # omit to use the defaults below
+# patterns = [".env", ".env.*"]   # omit for these env defaults; `*` = any chars
 ```
 
-Omit `files` to copy the built-in default env-file list:
+This is the right model for monorepos, where env files live in subdirectories
+(`apps/web/.env`, `packages/db/.env.local`). Two properties make it safe:
 
-```
-.env  .env.local  .env.development  .env.development.local
-.env.test.local  .env.production.local
-```
+- **Recursive** — files at any depth are found, not just the repo root.
+- **Only gitignored files** — "is this gitignored?" is answered by git itself
+  (`git ls-files`), so nested `.gitignore`s, negations, and globs all work.
+  Committed files like `.env.example` are **never** copied: they aren't
+  gitignored, and the fresh checkout already has them. Wholly-ignored
+  directories (e.g. `node_modules/`) are skipped, not walked into.
 
-Set `files` explicitly to override it.
+**Explicit mode.** Set `files` to a list of relative paths to copy exactly those
+instead (missing ones are skipped, not errors); discovery is then disabled:
+
+```toml
+[copy]
+enabled = true
+files = [".env", "apps/web/.env.local"]
+```
 
 ### `[install]` — install dependencies
 

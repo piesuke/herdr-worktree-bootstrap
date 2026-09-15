@@ -10,15 +10,10 @@ use crate::config::{CommandConfig, InstallRule};
 /// Default git update command when `[git] update = true` and no override given.
 const DEFAULT_GIT_UPDATE: &[&str] = &["git", "fetch", "--all", "--prune"];
 
-/// Default files copied when `[copy]` is enabled but `files` is omitted.
-const DEFAULT_COPY_FILES: &[&str] = &[
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.development.local",
-    ".env.test.local",
-    ".env.production.local",
-];
+/// Default filename globs for recursive discovery when `[copy]` is enabled but
+/// neither `files` nor `patterns` is set. Matches `.env` and `.env.<anything>`
+/// (`.env.local`, `.env.production.local`, …) at any depth in the repo.
+const DEFAULT_ENV_PATTERNS: &[&str] = &[".env", ".env.*"];
 
 /// Built-in install rules, checked *after* any user-defined rules. The first
 /// matching marker wins, so more specific lockfiles precede generic manifests.
@@ -94,33 +89,117 @@ pub fn git_update(worktree: &Path, command: Option<&[String]>) -> Result<()> {
     }
 }
 
-/// Copy files (e.g. `.env`) from the source repo into the worktree.
-/// Passing `None` copies the built-in default env-file list.
-pub fn copy_files(source: &Path, worktree: &Path, files: Option<&[String]>) -> Result<()> {
-    let default: Vec<String>;
-    let files: &[String] = match files {
-        Some(f) => f,
-        None => {
-            default = DEFAULT_COPY_FILES.iter().map(|s| s.to_string()).collect();
-            &default
-        }
-    };
+/// Copy an explicit list of relative paths from the source repo into the
+/// worktree. Missing source files are skipped, not errors.
+pub fn copy_files(source: &Path, worktree: &Path, files: &[String]) -> Result<()> {
     for file in files {
         let src = source.join(file);
-        let dst = worktree.join(file);
         if !src.exists() {
             println!("[copy] skip (missing in source): {file}");
             continue;
         }
-        if let Some(parent) = dst.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("creating {}", parent.display()))?;
-        }
-        std::fs::copy(&src, &dst)
-            .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
+        copy_into_worktree(&src, worktree, Path::new(file))?;
         println!("[copy] {file}");
     }
     Ok(())
+}
+
+/// Recursively discover **gitignored** files in the source repo whose basename
+/// matches one of `patterns` (default: env files) and copy each to the same
+/// relative path in the worktree. This is the right model for env files in a
+/// monorepo: they live in subdirectories and are gitignored, so a fresh
+/// checkout won't have them — while committed files like `.env.example` are
+/// left alone because they aren't gitignored.
+///
+/// "Which files are gitignored" is answered by git itself (`git ls-files`), so
+/// nested `.gitignore` files, negations, and globs are all honored correctly.
+pub fn copy_gitignored(source: &Path, worktree: &Path, patterns: Option<&[String]>) -> Result<()> {
+    let default: Vec<String>;
+    let patterns: &[String] = match patterns {
+        Some(p) => p,
+        None => {
+            default = DEFAULT_ENV_PATTERNS.iter().map(|s| s.to_string()).collect();
+            &default
+        }
+    };
+
+    // `--others --ignored --exclude-standard` lists working-tree files that git
+    // ignores; `--directory` collapses wholly-ignored dirs (e.g. node_modules/)
+    // to a single entry so we don't walk into them. `-z` is NUL-delimited to
+    // survive odd filenames.
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(source)
+        .args([
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+            "--full-name",
+        ])
+        .output()
+        .context("running `git ls-files` to discover gitignored files")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        println!(
+            "[copy] skip discovery: `git ls-files` failed ({})",
+            stderr.trim()
+        );
+        return Ok(());
+    }
+
+    let mut copied = 0usize;
+    for entry in output.stdout.split(|b| *b == 0) {
+        if entry.is_empty() {
+            continue;
+        }
+        let rel = String::from_utf8_lossy(entry);
+        // A trailing slash means a collapsed ignored directory — skip it.
+        if rel.ends_with('/') {
+            continue;
+        }
+        let name = rel.rsplit('/').next().unwrap_or(&rel);
+        if !patterns.iter().any(|pat| glob_match(pat, name)) {
+            continue;
+        }
+
+        let src = source.join(&*rel);
+        copy_into_worktree(&src, worktree, Path::new(&*rel))?;
+        println!("[copy] {rel}");
+        copied += 1;
+    }
+
+    if copied == 0 {
+        println!("[copy] no gitignored files matched {patterns:?}");
+    }
+    Ok(())
+}
+
+/// Copy `src` to `worktree/rel`, creating parent directories as needed.
+fn copy_into_worktree(src: &Path, worktree: &Path, rel: &Path) -> Result<()> {
+    let dst = worktree.join(rel);
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    std::fs::copy(src, &dst)
+        .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
+    Ok(())
+}
+
+/// Glob match against a filename. Supports `*` (any sequence, including empty);
+/// no `?` or character classes. Used to match discovered basenames.
+fn glob_match(pattern: &str, name: &str) -> bool {
+    fn helper(pat: &[u8], name: &[u8]) -> bool {
+        match pat.split_first() {
+            None => name.is_empty(),
+            Some((b'*', rest)) => (0..=name.len()).any(|i| helper(rest, &name[i..])),
+            Some((c, rest)) => name.first() == Some(c) && helper(rest, &name[1..]),
+        }
+    }
+    helper(pattern.as_bytes(), name.as_bytes())
 }
 
 /// Install dependencies inside the worktree.

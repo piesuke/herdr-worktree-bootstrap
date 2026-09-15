@@ -14,15 +14,17 @@ update = true
 # Override the command if you want more than a fetch. Default shown below.
 # command = ["git", "fetch", "--all", "--prune"]
 
-# Copy files from the source repo into the new worktree (e.g. gitignored env
-# files that a fresh checkout won't have).
+# Copy gitignored files (env files, local secrets) that a fresh checkout won't
+# have into the new worktree.
 [copy]
 enabled = true
-# Omit `files` to use the built-in default list:
-#   .env, .env.local, .env.development, .env.development.local,
-#   .env.test.local, .env.production.local
-# Or set it explicitly to override (missing files are skipped, not errors):
-# files = [".env", ".env.local"]
+# Default (omit `files`): recursively copy *gitignored* files whose name matches
+# `patterns` — great for monorepos where env files sit in subdirectories.
+# Committed files like `.env.example` are never copied (they aren't gitignored).
+# patterns = [".env", ".env.*"]   # omit for these env defaults; `*` = any chars
+#
+# Or list exact relative paths to copy instead (disables discovery):
+# files = [".env", "apps/web/.env.local"]
 
 # Install dependencies. Detection is automatic from lockfiles/manifests and
 # covers the major languages out of the box (node, rust, go, python, ruby, php,

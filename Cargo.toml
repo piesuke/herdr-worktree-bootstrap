@@ -2,6 +2,11 @@
 name = "herdr-worktree-bootstrap"
 version = "0.1.0"
 edition = "2024"
+# herdr builds this plugin from source on the user's machine, so the toolchain
+# floor is the user's problem the moment it is wrong. Declaring it turns a
+# edition-2024 parse error deep in the build into cargo saying which version it
+# needs.
+rust-version = "1.85"
 description = "Bootstrap a new worktree: copy gitignored files, install deps, run hooks"
 license = "MIT"
 repository = "https://github.com/piesuke/herdr-worktree-bootstrap"

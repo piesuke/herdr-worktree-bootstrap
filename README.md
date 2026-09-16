@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/piesuke/herdr-worktree-bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/piesuke/herdr-worktree-bootstrap/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![herdr 0.7.0+](https://img.shields.io/badge/herdr-0.7.0%2B-2b7489)
+![herdr 0.7.1+](https://img.shields.io/badge/herdr-0.7.1%2B-2b7489)
 ![platforms: linux | macos](https://img.shields.io/badge/platforms-linux%20%7C%20macos-lightgrey)
 ![rust edition 2024](https://img.shields.io/badge/rust-edition%202024-dea584)
 
@@ -121,8 +121,9 @@ does nothing is the most expensive failure mode here.
 
 ## Installing the plugin
 
-Requires **herdr 0.7.0+** (`min_herdr_version` in the manifest) and a Rust
-toolchain to build the binary. Linux and macOS only.
+Requires **herdr 0.7.1+** (`min_herdr_version` in the manifest) and a **Rust
+1.85+** toolchain — herdr builds the binary from source on your machine, with
+the `[[build]]` steps in the manifest. Linux and macOS only.
 
 ### Install from GitHub
 
@@ -512,6 +513,7 @@ via a non-forcing `git branch -d` that refuses if you committed something).
 │   ├── event.rs             # HERDR_PLUGIN_EVENT_JSON types
 │   ├── config.rs            # .herdr/worktree-bootstrap.toml types + loading
 │   ├── bootstrap.rs         # copy / install / hook execution
+│   ├── herdr.rs             # which herdr binary the plugin calls back into
 │   ├── notify.rs            # the end-of-run herdr toast
 │   ├── report.rs            # the full failure report and the pane showing it
 │   └── rollback.rs          # `[failure] action = "remove"`

@@ -10,7 +10,7 @@ config key is breaking** — an existing repo's committed
 `.herdr/worktree-bootstrap.toml` stops parsing and the bootstrap aborts. Such
 changes are called out under **Changed** or **Removed**, never **Added**.
 
-## [Unreleased]
+## [0.1.0] - 2026-09-16
 
 ### Added
 
@@ -63,4 +63,5 @@ changes are called out under **Changed** or **Removed**, never **Added**.
   behaviour change — the schema, the error messages, and unknown-key rejection
   are identical.
 
-[Unreleased]: https://github.com/piesuke/herdr-worktree-bootstrap/commits/main
+[Unreleased]: https://github.com/piesuke/herdr-worktree-bootstrap/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/piesuke/herdr-worktree-bootstrap/releases/tag/v0.1.0

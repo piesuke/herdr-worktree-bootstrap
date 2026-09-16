@@ -16,7 +16,7 @@ A [Herdr](https://github.com/herdrdev/herdr) plugin that bootstraps a freshly cr
 worktree: it copies gitignored files (like `.env`), installs dependencies, and
 runs your own pre/post commands — automatically, on `worktree.created`.
 
-The plugin itself is generic. **Each repository configures its own bootstrap**
+**Each repository configures its own bootstrap**
 via a committed `.herdr/worktree-bootstrap.toml`, so different projects can copy
 different files, install with different tools, and run different hooks.
 

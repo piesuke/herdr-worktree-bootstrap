@@ -7,9 +7,10 @@
 //! window.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result};
+
+use crate::herdr;
 
 /// Entrypoint id of the `[[panes]]` block in `herdr-plugin.toml`. Public so
 /// `tests/manifest.rs` can hold the manifest to it — herdr resolves the two by
@@ -128,7 +129,7 @@ fn open_pane(path: &Path) {
     let dir = state_dir();
     close_stale_pane(&dir);
 
-    let output = Command::new("herdr")
+    let output = herdr::command()
         .args(["plugin", "pane", "open", "--plugin"])
         .arg(&plugin_id)
         .args(["--entrypoint", PANE_ENTRYPOINT])
@@ -166,7 +167,7 @@ fn close_stale_pane(dir: &Path) {
     };
     let _ = std::fs::remove_file(&marker);
 
-    let _ = Command::new("herdr")
+    let _ = herdr::command()
         .args(["plugin", "pane", "close", pane_id.trim()])
         .output();
 }

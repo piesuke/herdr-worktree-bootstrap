@@ -10,6 +10,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use crate::herdr;
+
 /// Ask herdr to remove the worktree, its workspace and its pane.
 ///
 /// `--force` is not optional here: the worktree this runs against is by
@@ -36,7 +38,7 @@ pub fn remove_worktree(workspace_id: Option<&str>, branch: Option<&str>, source:
 
     println!("[rollback] removing workspace {workspace_id}");
     let argv = worktree_remove_command(workspace_id);
-    match Command::new("herdr").args(&argv).output() {
+    match herdr::command().args(&argv).output() {
         Err(err) => println!("[rollback] could not run `herdr`: {err}"),
         Ok(output) if !output.status.success() => println!(
             "[rollback] herdr refused to remove the worktree: {}",

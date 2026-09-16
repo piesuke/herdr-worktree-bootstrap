@@ -5,12 +5,11 @@
 //! is the only channel that reaches the user at the moment the worktree
 //! appears, which is the moment they can still act on a half-bootstrapped one.
 
-use std::process::Command;
-
 use serde::Deserialize;
 
 use crate::Summary;
 use crate::config::NotifyWhen;
+use crate::herdr;
 
 /// A notification, ready to hand to `herdr notification show`.
 #[derive(Debug, PartialEq, Eq)]
@@ -103,11 +102,11 @@ fn describe(summary: &Summary) -> String {
 
 /// Post the toast.
 ///
-/// Never fails the bootstrap: herdr missing from `PATH`, or refusing the
-/// request, is worth a line in the log but not a worktree left unusable over a
-/// cosmetic step that runs after all the real work is done.
+/// Never fails the bootstrap: herdr being unreachable, or refusing the request,
+/// is worth a line in the log but not a worktree left unusable over a cosmetic
+/// step that runs after all the real work is done.
 pub fn show(toast: &Toast) {
-    let output = Command::new("herdr")
+    let output = herdr::command()
         .args(["notification", "show", &toast.title])
         .args(["--body", &toast.body])
         .args(["--sound", toast.sound])

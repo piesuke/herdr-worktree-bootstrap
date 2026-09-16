@@ -8,6 +8,7 @@
 pub mod bootstrap;
 pub mod config;
 pub mod event;
+pub mod herdr;
 pub mod notify;
 pub mod report;
 pub mod rollback;

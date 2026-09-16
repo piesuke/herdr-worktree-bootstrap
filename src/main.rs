@@ -16,7 +16,16 @@ fn main() -> Result<()> {
 
     let worktree = Path::new(&event.data.worktree.path);
     println!("[bootstrap] worktree: {}", worktree.display());
-    println!("[bootstrap] branch:   {}", event.data.worktree.branch);
+    // A detached worktree carries no branch at all. Print a placeholder rather
+    // than dropping the line: these logs are the only window into a run, and a
+    // missing line reads as "the plugin never got that far".
+    let branch = event
+        .data
+        .worktree
+        .branch
+        .as_deref()
+        .unwrap_or("(detached)");
+    println!("[bootstrap] branch:   {branch}");
 
     let source = event
         .data

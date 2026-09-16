@@ -18,7 +18,7 @@ pub struct EventData {
 #[derive(Deserialize)]
 pub struct Worktree {
     pub path: String,
-    pub branch: String,
+    pub branch: Option<String>,
 }
 
 #[derive(Deserialize)]

@@ -44,6 +44,20 @@ enabled = true
 # marker = "flake.nix"
 # command = ["nix", "develop", "--command", "true"]
 
+# Announce the result as a herdr toast ("copied 3 files / pnpm install / uv
+# sync", or the failing command). This is the only section that is on by
+# default: herdr captures the plugin's stdout instead of printing it, so
+# otherwise a run is invisible unless you go and read `herdr plugin log list`.
+#
+# NOTE: herdr suppresses every toast unless `[ui.toast] delivery` is set in
+# *herdr's own* config.toml (herdr = in-app, terminal = desktop notification,
+# system = OS notification service). Until then this section has no effect and
+# the plugin log says so.
+[notify]
+# when = "always"    # default: after every run in which a phase was enabled
+# when = "failure"   # only when the bootstrap aborts
+# when = "never"     # stay silent
+
 # Hooks are arbitrary commands run inside the new worktree, in order.
 # Note: these are NOT run through a shell, so `&&`, pipes, `$VARS`, and
 # redirects don't work — wrap them yourself with ["sh", "-c", "..."].

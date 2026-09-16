@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use herdr_worktree_bootstrap::notify::{self, Outcome};
 use herdr_worktree_bootstrap::{config, event::Event, run};
 
 fn main() -> Result<()> {
@@ -41,7 +42,18 @@ fn main() -> Result<()> {
     let config_dir = source.as_deref().unwrap_or(worktree);
     let config = config::load(config_dir).context("failed to load bootstrap config")?;
 
-    run(worktree, source.as_deref(), &config)?;
+    // The toast is posted for both outcomes before the error propagates, so a
+    // failed bootstrap is the one the user hears about rather than the one
+    // that vanishes into the captured log.
+    let outcome = run(worktree, source.as_deref(), &config);
+    let toast = match &outcome {
+        Ok(summary) => notify::toast_for(config.notify.when, branch, Outcome::Succeeded(summary)),
+        Err(err) => notify::toast_for(config.notify.when, branch, Outcome::Failed(err)),
+    };
+    if let Some(toast) = toast {
+        notify::show(&toast);
+    }
+    outcome?;
 
     println!("[bootstrap] done");
     Ok(())

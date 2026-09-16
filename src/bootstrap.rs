@@ -99,8 +99,10 @@ pub fn git_update(worktree: &Path, command: Option<&[String]>) -> Result<()> {
 }
 
 /// Copy an explicit list of relative paths from the source repo into the
-/// worktree. Missing source files are skipped, not errors.
-pub fn copy_files(source: &Path, worktree: &Path, files: &[String]) -> Result<()> {
+/// worktree. Missing source files are skipped, not errors. Returns how many
+/// files were actually copied, which is what the end-of-run toast reports.
+pub fn copy_files(source: &Path, worktree: &Path, files: &[String]) -> Result<usize> {
+    let mut copied = 0usize;
     for file in files {
         let src = source.join(file);
         if !src.exists() {
@@ -109,8 +111,9 @@ pub fn copy_files(source: &Path, worktree: &Path, files: &[String]) -> Result<()
         }
         copy_into_worktree(&src, worktree, Path::new(file))?;
         println!("[copy] {file}");
+        copied += 1;
     }
-    Ok(())
+    Ok(copied)
 }
 
 /// Recursively discover **gitignored** files in the source repo whose basename
@@ -122,7 +125,11 @@ pub fn copy_files(source: &Path, worktree: &Path, files: &[String]) -> Result<()
 ///
 /// "Which files are gitignored" is answered by git itself (`git ls-files`), so
 /// nested `.gitignore` files, negations, and globs are all honored correctly.
-pub fn copy_gitignored(source: &Path, worktree: &Path, patterns: Option<&[String]>) -> Result<()> {
+pub fn copy_gitignored(
+    source: &Path,
+    worktree: &Path,
+    patterns: Option<&[String]>,
+) -> Result<usize> {
     let default: Vec<String>;
     let patterns: &[String] = match patterns {
         Some(p) => p,
@@ -157,7 +164,7 @@ pub fn copy_gitignored(source: &Path, worktree: &Path, patterns: Option<&[String
             "[copy] skip discovery: `git ls-files` failed ({})",
             stderr.trim()
         );
-        return Ok(());
+        return Ok(0);
     }
 
     let mut copied = 0usize;
@@ -184,7 +191,7 @@ pub fn copy_gitignored(source: &Path, worktree: &Path, patterns: Option<&[String
     if copied == 0 {
         println!("[copy] no gitignored files matched {patterns:?}");
     }
-    Ok(())
+    Ok(copied)
 }
 
 /// Copy `src` to `worktree/rel`, creating parent directories as needed.
@@ -222,7 +229,15 @@ fn glob_match(pattern: &str, name: &str) -> bool {
 /// A listed directory that doesn't exist aborts: `dirs` describes committed
 /// repo structure, so a missing one means the config is wrong, and silently
 /// installing nothing is the failure mode this option exists to fix.
-pub fn install_deps(worktree: &Path, rules: &[InstallRule], dirs: Option<&[String]>) -> Result<()> {
+///
+/// Returns the command run in each directory, in order. An empty vec means
+/// every directory was checked and none matched a rule — a distinction the
+/// end-of-run toast makes, because "installed nothing" is usually a surprise.
+pub fn install_deps(
+    worktree: &Path,
+    rules: &[InstallRule],
+    dirs: Option<&[String]>,
+) -> Result<Vec<String>> {
     let default: Vec<String>;
     let dirs: &[String] = match dirs {
         Some(dirs) => dirs,
@@ -240,10 +255,13 @@ pub fn install_deps(worktree: &Path, rules: &[InstallRule], dirs: Option<&[Strin
         }
     }
 
+    let mut installed = Vec::new();
     for dir in dirs {
-        install_in_dir(&worktree.join(dir), dir, rules)?;
+        if let Some(argv) = install_in_dir(&worktree.join(dir), dir, rules)? {
+            installed.push(argv.join(" "));
+        }
     }
-    Ok(())
+    Ok(installed)
 }
 
 /// Decide which install command applies in `base`, without running anything.
@@ -265,13 +283,16 @@ fn detect_install(base: &Path, rules: &[InstallRule]) -> Option<Vec<String>> {
         .map(|(_, argv)| argv.iter().map(|s| s.to_string()).collect())
 }
 
-/// Detect and install in a single directory.
-fn install_in_dir(base: &Path, label: &str, rules: &[InstallRule]) -> Result<()> {
+/// Detect and install in a single directory, returning the command it ran.
+fn install_in_dir(base: &Path, label: &str, rules: &[InstallRule]) -> Result<Option<Vec<String>>> {
     match detect_install(base, rules) {
-        Some(argv) => run_command(base, &argv),
+        Some(argv) => {
+            run_command(base, &argv)?;
+            Ok(Some(argv))
+        }
         None => {
             println!("[install] no matching install rule in {label}, skipping");
-            Ok(())
+            Ok(None)
         }
     }
 }
@@ -293,7 +314,8 @@ fn marker_matches(worktree: &Path, marker: &str) -> bool {
 
 /// Run a list of hook commands in order. Any non-zero exit aborts. A hook's
 /// `dir` selects a subdirectory of the worktree to run in (default: the root).
-pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<()> {
+/// Returns how many ran, which on the happy path is all of them.
+pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<usize> {
     for hook in hooks {
         let cwd = match &hook.dir {
             Some(dir) => worktree.join(dir),
@@ -301,7 +323,7 @@ pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<()> {
         };
         run_command(&cwd, &hook.command)?;
     }
-    Ok(())
+    Ok(hooks.len())
 }
 
 /// Run one command in `cwd`. Non-zero exit aborts (returns Err).

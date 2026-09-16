@@ -8,12 +8,37 @@
 pub mod bootstrap;
 pub mod config;
 pub mod event;
+pub mod notify;
 
 use std::path::Path;
 
 use anyhow::{Context, Result};
 
 use crate::config::Config;
+
+/// What a [`run`] actually did, for the end-of-run notification.
+///
+/// The two copy/install fields are `Option` so that "the phase was disabled"
+/// stays distinguishable from "the phase ran and found nothing". Only the
+/// second is worth reporting, and it is the harder of the two to diagnose
+/// from the outside — it looks identical to a phase that never ran.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Summary {
+    pub git_updated: bool,
+    /// Files copied, when the copy phase ran.
+    pub copied: Option<usize>,
+    /// The command run in each install directory, when the install phase ran.
+    pub installed: Option<Vec<String>>,
+    /// Pre and post hooks together.
+    pub hooks_run: usize,
+}
+
+impl Summary {
+    /// No phase was enabled, so there is nothing to report.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
 
 /// Run the whole bootstrap lifecycle against `worktree`.
 ///
@@ -25,32 +50,35 @@ use crate::config::Config;
 /// `source` is the repo the worktree was derived from. It is only needed by the
 /// copy phase, which reads the gitignored files a fresh checkout won't have; the
 /// other phases operate entirely inside `worktree`.
-pub fn run(worktree: &Path, source: Option<&Path>, config: &Config) -> Result<()> {
+pub fn run(worktree: &Path, source: Option<&Path>, config: &Config) -> Result<Summary> {
+    let mut summary = Summary::default();
+
     // Phase 0: bring git up to date, before anything else runs.
     if config.git.update {
         bootstrap::git_update(worktree, config.git.command.as_deref())?;
+        summary.git_updated = true;
     }
 
-    bootstrap::run_hooks(worktree, &config.hooks.pre)?;
+    summary.hooks_run += bootstrap::run_hooks(worktree, &config.hooks.pre)?;
 
     if config.copy.enabled {
         let src = source.context("copy is enabled but the event has no source repo_root")?;
-        match config.copy.files.as_deref() {
+        summary.copied = Some(match config.copy.files.as_deref() {
             Some(files) => bootstrap::copy_files(src, worktree, files)?,
             None => bootstrap::copy_gitignored(src, worktree, config.copy.patterns.as_deref())?,
-        }
+        });
     }
 
     if config.install.enabled {
-        bootstrap::install_deps(
+        summary.installed = Some(bootstrap::install_deps(
             worktree,
             &config.install.rules,
             config.install.dirs.as_deref(),
-        )?;
+        )?);
     }
 
     // Post hooks: run last, after copy and install.
-    bootstrap::run_hooks(worktree, &config.hooks.post)?;
+    summary.hooks_run += bootstrap::run_hooks(worktree, &config.hooks.post)?;
 
-    Ok(())
+    Ok(summary)
 }

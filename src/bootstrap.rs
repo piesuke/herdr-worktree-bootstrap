@@ -10,6 +10,14 @@ use crate::config::{CommandConfig, InstallRule};
 /// Default git update command when `[git] update = true` and no override given.
 const DEFAULT_GIT_UPDATE: &[&str] = &["git", "fetch", "--all", "--prune"];
 
+/// How many trailing lines of a failed command's output to quote in the error.
+///
+/// Sized for the pane and the report file, not the toast — the tail is where
+/// package managers print the actual reason, and the two lines before it are
+/// usually the path or the dependency it was working on. [`crate::notify`]
+/// shortens this again for the toast.
+const FAILURE_TAIL_LINES: usize = 40;
+
 /// Default filename globs for recursive discovery when `[copy]` is enabled but
 /// neither `files` nor `patterns` is set. Matches `.env` and `.env.<anything>`
 /// (`.env.local`, `.env.production.local`, …) at any depth in the repo.
@@ -326,7 +334,8 @@ pub fn run_hooks(worktree: &Path, hooks: &[CommandConfig]) -> Result<usize> {
     Ok(hooks.len())
 }
 
-/// Run one command in `cwd`. Non-zero exit aborts (returns Err).
+/// Run one command in `cwd`. Non-zero exit aborts, and the error carries the
+/// tail of what the command printed.
 ///
 /// Crate-internal: callers outside the library drive the phases through
 /// [`crate::run`], not individual commands.
@@ -345,16 +354,60 @@ pub(crate) fn run_command(cwd: &Path, argv: &[String]) -> Result<()> {
     }
     println!("[run] {}", argv.join(" "));
 
-    let status = Command::new(program)
+    // Captured instead of inherited so the failure message can quote it. An
+    // exit status alone ("`pnpm install` exited with exit status: 1") is the
+    // one thing the user already knows; the reason lives in the output.
+    //
+    // Why not stream it: the output is replayed verbatim below, so nothing is
+    // lost from the plugin log — only the live interleaving, which nobody is
+    // watching because herdr redirects this process's stdout to a log file.
+    let output = Command::new(program)
         .args(rest)
         .current_dir(cwd)
-        .status()
+        .output()
         .with_context(|| format!("spawning `{program}`"))?;
 
-    if !status.success() {
-        bail!("`{}` exited with {}", argv.join(" "), status);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    print!("{stdout}");
+    eprint!("{stderr}");
+
+    if !output.status.success() {
+        let command = argv.join(" ");
+        match failure_tail(&stdout, &stderr) {
+            Some(tail) => bail!("`{command}` exited with {}\n{tail}", output.status),
+            None => bail!(
+                "`{command}` exited with {} without printing anything",
+                output.status
+            ),
+        }
     }
     Ok(())
+}
+
+/// The tail of a failed command's output, for the error message.
+///
+/// Why not stderr only: pnpm — the failure that prompted this — prints
+/// `ERR_PNPM_ENOENT` and its explanation on *stdout*, so a quiet stderr must
+/// fall through to stdout rather than report the command as silent.
+fn failure_tail(stdout: &str, stderr: &str) -> Option<String> {
+    [stderr, stdout].into_iter().find_map(last_lines)
+}
+
+/// The last [`FAILURE_TAIL_LINES`] non-blank lines of `text`, or `None` if it
+/// has none. Blank lines are dropped so a trailing newline run cannot push the
+/// real message out of the window.
+fn last_lines(text: &str) -> Option<String> {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+    let start = lines.len().saturating_sub(FAILURE_TAIL_LINES);
+    Some(lines[start..].join("\n"))
 }
 
 #[cfg(test)]
@@ -535,6 +588,69 @@ mod tests {
         let dir = dir_with(&[]);
         let err = run_command(dir.path(), &[]).expect_err("an empty argv should be an error");
         assert!(err.to_string().contains("empty command"), "got: {err}");
+    }
+
+    /// The whole point of capturing: without it the error is just an exit
+    /// status, and the user has to go digging through herdr's plugin log for
+    /// the line that says what actually broke.
+    #[test]
+    fn a_failure_quotes_what_the_command_printed_to_stderr() {
+        let dir = dir_with(&[]);
+        let err = run_command(dir.path(), &argv(&["sh", "-c", "echo boom >&2; exit 3"]))
+            .expect_err("a non-zero exit should abort");
+
+        let msg = err.to_string();
+        assert!(msg.contains("boom"), "got: {msg}");
+        assert!(msg.contains("exit status: 3"), "got: {msg}");
+    }
+
+    /// pnpm prints `ERR_PNPM_ENOENT` on stdout with nothing on stderr, so a
+    /// stderr-only tail would report the real-world failure as silent.
+    #[test]
+    fn a_failure_falls_back_to_stdout_when_stderr_is_empty() {
+        let dir = dir_with(&[]);
+        let err = run_command(
+            dir.path(),
+            &argv(&["sh", "-c", "echo ERR_PNPM_ENOENT; exit 1"]),
+        )
+        .expect_err("a non-zero exit should abort");
+
+        assert!(err.to_string().contains("ERR_PNPM_ENOENT"), "got: {err}");
+    }
+
+    #[test]
+    fn a_failure_with_no_output_at_all_says_so() {
+        let dir = dir_with(&[]);
+        let err = run_command(dir.path(), &argv(&["sh", "-c", "exit 1"]))
+            .expect_err("a non-zero exit should abort");
+
+        assert!(
+            err.to_string().contains("without printing anything"),
+            "got: {err}"
+        );
+    }
+
+    /// A build that logs thousands of lines must not paste all of them into a
+    /// notification; the tail is the part that carries the reason.
+    #[test]
+    fn a_long_failure_is_cut_down_to_its_last_lines() {
+        let noisy = format!("seq 1 {}", FAILURE_TAIL_LINES * 3);
+        let dir = dir_with(&[]);
+        let err = run_command(
+            dir.path(),
+            &argv(&["sh", "-c", &format!("{noisy} >&2; exit 1")]),
+        )
+        .expect_err("a non-zero exit should abort");
+
+        let msg = err.to_string();
+        let last = (FAILURE_TAIL_LINES * 3).to_string();
+        assert!(msg.contains(&last), "the last line should survive: {msg}");
+        assert!(
+            !msg.contains("\n1\n"),
+            "the first line should be cut: {msg}"
+        );
+        // One line for the command itself, the rest for the output window.
+        assert_eq!(msg.lines().count(), FAILURE_TAIL_LINES + 1);
     }
 
     #[test]

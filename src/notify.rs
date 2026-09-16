@@ -48,10 +48,32 @@ pub fn toast_for(when: NotifyWhen, branch: &str, outcome: Outcome<'_>) -> Option
             // `{:#}` flattens anyhow's context chain onto one line, so the
             // toast carries the failing command and not just the outermost
             // "bootstrap failed".
-            body: format!("{err:#}"),
+            body: abbreviate(&format!("{err:#}"), TOAST_BODY_LINES),
             sound: "request",
         }),
     }
+}
+
+/// How many lines of a failure a toast gets. herdr's dialog truncates whatever
+/// it cannot fit, and a truncation it performs is a truncation we don't control
+/// — so the cut is made here, where the interesting lines can be kept.
+/// [`crate::report`] has the untruncated version.
+const TOAST_BODY_LINES: usize = 6;
+
+/// Shorten a failure body to `max_lines`, keeping both ends.
+///
+/// Why not just the head or just the tail: the first line names the command
+/// that failed and the last lines say why, and a package manager routinely puts
+/// a dozen lines of progress between them.
+fn abbreviate(body: &str, max_lines: usize) -> String {
+    let lines: Vec<&str> = body.lines().collect();
+    if lines.len() <= max_lines {
+        return body.to_string();
+    }
+
+    let mut kept = vec![lines[0], "…"];
+    kept.extend_from_slice(&lines[lines.len() - (max_lines - 2)..]);
+    kept.join("\n")
 }
 
 /// One line per phase that ran, in the order the phases execute.
@@ -184,6 +206,40 @@ mod tests {
         assert!(toast.body.contains("pnpm install"), "got: {}", toast.body);
         assert!(toast.body.contains("install phase"), "got: {}", toast.body);
         assert_eq!(toast.sound, "request");
+    }
+
+    /// The failure that prompted the capture: pnpm prints a wall of progress
+    /// and puts the reason at the very bottom. Both ends have to survive, or
+    /// the toast says either "something failed" or "…no such file" with no
+    /// indication of what was running.
+    #[test]
+    fn a_long_failure_keeps_the_command_and_the_reason_around_the_cut() {
+        let noise: Vec<String> = (1..=30).map(|n| format!("progress {n}")).collect();
+        let err = anyhow::anyhow!(
+            "`pnpm install` exited with exit status: 1\n{}\nERR_PNPM_ENOENT: no such file",
+            noise.join("\n")
+        );
+        let body = toast_for(NotifyWhen::Always, "wt/x", Outcome::Failed(&err))
+            .expect("failures always toast")
+            .body;
+
+        assert!(body.starts_with("`pnpm install` exited"), "got: {body}");
+        assert!(
+            body.ends_with("ERR_PNPM_ENOENT: no such file"),
+            "got: {body}"
+        );
+        assert!(body.contains('…'), "the cut should be visible: {body}");
+        assert_eq!(body.lines().count(), TOAST_BODY_LINES);
+    }
+
+    #[test]
+    fn a_failure_short_enough_to_fit_is_left_alone() {
+        let err = anyhow::anyhow!("`true` exited with exit status: 1\nboom");
+        let body = toast_for(NotifyWhen::Always, "wt/x", Outcome::Failed(&err))
+            .expect("failures always toast")
+            .body;
+
+        assert_eq!(body, "`true` exited with exit status: 1\nboom");
     }
 
     /// The two states worth telling apart: a phase that ran and found nothing

@@ -38,6 +38,35 @@ pub struct Config {
     /// Whether to announce the result as a herdr toast.
     #[serde(default)]
     pub notify: NotifyConfig,
+    /// What to do with the worktree when the bootstrap aborts.
+    #[serde(default)]
+    pub failure: FailureConfig,
+}
+
+#[derive(Deserialize, Default, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct FailureConfig {
+    #[serde(default)]
+    pub action: OnFailure,
+}
+
+/// What happens to a worktree whose bootstrap failed.
+///
+/// herdr fires this plugin *after* the worktree, its workspace and its pane
+/// already exist, so "don't create it on failure" isn't on the menu — the only
+/// choice is whether to undo what herdr just did.
+#[derive(Deserialize, Default, Debug, PartialEq, Eq, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum OnFailure {
+    /// Leave the half-bootstrapped worktree in place (default).
+    #[default]
+    Keep,
+    /// Tear the worktree, its workspace and its pane back down.
+    ///
+    /// Opt-in, and deliberately not the default: a bootstrap can run for
+    /// minutes, the agent pane is usable the whole time, and the removal is
+    /// forced — so anything typed or written in that window goes with it.
+    Remove,
 }
 
 #[derive(Deserialize, Default, Debug, PartialEq)]
@@ -232,6 +261,30 @@ mod tests {
         }
     }
 
+    /// Removal is destructive and irreversible, so the one thing this test
+    /// pins is that it can only happen because somebody asked for it.
+    #[test]
+    fn a_failed_bootstrap_keeps_its_worktree_unless_told_otherwise() {
+        assert_eq!(toml_config("").failure.action, OnFailure::Keep);
+        assert_eq!(
+            toml_config("[failure]\naction = \"remove\"").failure.action,
+            OnFailure::Remove
+        );
+    }
+
+    #[test]
+    fn an_unknown_failure_action_is_rejected() {
+        let err = toml::from_str::<Config>("[failure]\naction = \"rollback\"")
+            .expect_err("only the two documented actions are valid");
+        let msg = err.to_string();
+        for action in ["keep", "remove"] {
+            assert!(
+                msg.contains(action),
+                "error should list `{action}`, got: {msg}"
+            );
+        }
+    }
+
     #[test]
     fn parses_a_full_config() {
         let config = toml_config(
@@ -298,6 +351,7 @@ mod tests {
             "[install]\nbogus = true",
             "[[install.rules]]\nmarker = \"a\"\ncommand = []\nbogus = true",
             "[[hooks.pre]]\ncommand = []\nbogus = true",
+            "[failure]\nbogus = true",
         ] {
             assert!(
                 toml::from_str::<Config>(text).is_err(),

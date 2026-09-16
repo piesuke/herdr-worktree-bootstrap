@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use herdr_worktree_bootstrap::config::OnFailure;
 use herdr_worktree_bootstrap::notify::{self, Outcome};
-use herdr_worktree_bootstrap::{config, event::Event, run};
+use herdr_worktree_bootstrap::{config, event::Event, report, rollback, run};
 
 fn main() -> Result<()> {
     let event_json =
@@ -52,6 +53,21 @@ fn main() -> Result<()> {
     };
     if let Some(toast) = toast {
         notify::show(&toast);
+    }
+
+    if let Err(err) = &outcome {
+        // Report before rollback, in that order: removing the workspace takes
+        // this pane's siblings with it, and a pane opened afterwards would have
+        // nothing to attach to. The report file outlives both either way.
+        report::show_failure(branch, worktree, err);
+
+        if config.failure.action == OnFailure::Remove {
+            rollback::remove_worktree(
+                event.data.workspace.workspace_id.as_deref(),
+                event.data.worktree.branch.as_deref(),
+                source.as_deref(),
+            );
+        }
     }
     outcome?;
 

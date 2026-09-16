@@ -9,6 +9,8 @@ pub mod bootstrap;
 pub mod config;
 pub mod event;
 pub mod notify;
+pub mod report;
+pub mod rollback;
 
 use std::path::Path;
 
@@ -45,7 +47,8 @@ impl Summary {
 /// Phases run in a fixed order — **git update → pre hooks → copy → install →
 /// post hooks** — and the first failure aborts the rest (fail-fast), leaving the
 /// worktree partially bootstrapped rather than silently continuing past a broken
-/// step.
+/// step. What becomes of that worktree afterwards is the caller's decision, via
+/// [`config::OnFailure`].
 ///
 /// `source` is the repo the worktree was derived from. It is only needed by the
 /// copy phase, which reads the gitignored files a fresh checkout won't have; the

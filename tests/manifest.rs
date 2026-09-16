@@ -20,10 +20,18 @@ struct Plugin {
     build: Vec<Command>,
     #[serde(default)]
     events: Vec<Command>,
+    #[serde(default)]
+    panes: Vec<Pane>,
 }
 
 #[derive(Deserialize)]
 struct Command {
+    command: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct Pane {
+    id: String,
     command: Vec<String>,
 }
 
@@ -103,6 +111,42 @@ fn the_manifest_builds_the_release_binary_it_invokes() {
             .iter()
             .any(|step| step.command == ["cargo", "build", "--release"]),
         "no `cargo build --release` step, but the event runs target/release/"
+    );
+}
+
+/// The pane the plugin opens on a failure, named by a string on both sides:
+/// `herdr plugin pane open --entrypoint` in Rust, `[[panes]] id` here. herdr
+/// resolves them at runtime, so a rename shows up as "no such entrypoint" in a
+/// log nobody reads, at the one moment the user most needs the pane.
+#[test]
+fn the_failure_pane_entrypoint_exists_in_the_manifest() {
+    let plugin = plugin();
+    assert!(
+        plugin
+            .panes
+            .iter()
+            .any(|pane| pane.id == herdr_worktree_bootstrap::report::PANE_ENTRYPOINT),
+        "no `[[panes]]` entry with id `{}`",
+        herdr_worktree_bootstrap::report::PANE_ENTRYPOINT
+    );
+}
+
+/// The pane command is fixed in the manifest, so the only way it learns which
+/// report to show is this env var — which the plugin sets and the manifest
+/// expands, with nothing but spelling holding the two together.
+#[test]
+fn the_failure_pane_reads_the_env_var_the_plugin_sets() {
+    let var = herdr_worktree_bootstrap::report::REPORT_PATH_VAR;
+    let pane = plugin()
+        .panes
+        .into_iter()
+        .find(|pane| pane.id == herdr_worktree_bootstrap::report::PANE_ENTRYPOINT)
+        .expect("the failure pane should exist");
+
+    assert!(
+        pane.command.iter().any(|arg| arg.contains(var)),
+        "the pane command never mentions ${var}: {:?}",
+        pane.command
     );
 }
 

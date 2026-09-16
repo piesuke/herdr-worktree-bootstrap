@@ -37,9 +37,28 @@ changes are called out under **Changed** or **Removed**, never **Added**.
   plugin's stdout rather than printing it — without a toast a run is invisible
   unless you go and read `herdr plugin log list`. Requires `[ui.toast] delivery`
   in herdr's own config; the plugin log says so when herdr suppresses a toast.
+- `[failure]`: what becomes of a worktree whose bootstrap aborted.
+  `action = "keep"` (default) leaves it alone; `action = "remove"` takes the
+  worktree, its workspace and its pane back down, then deletes the branch with a
+  non-forcing `git branch -d`. This is as close as a plugin can get to "don't
+  create the worktree on failure" — herdr fires plugin events *after* the
+  worktree already exists and does not treat the exit code as a veto. `remove`
+  is opt-in because the removal is forced, and a bootstrap that runs for minutes
+  is a window in which the pane was usable.
+- A failure now writes a full report — branch, worktree path, and the whole
+  error chain — to the plugin's state directory and opens it in a herdr pane
+  running `less`, so the reason is scrollable and untruncated. The path is
+  logged whether or not the pane opens.
 
 ### Changed
 
+- A failing command's own output is now part of the error. Previously a failure
+  reported only its exit status (`` `pnpm install` exited with exit status: 1 ``)
+  and the real reason — `ERR_PNPM_ENOENT`, a missing binary, a lockfile mismatch
+  — reached nothing but the plugin log. Commands are captured instead of
+  inheriting stdio, and replayed verbatim so the log is unchanged; the last 40
+  lines go into the error, and the toast keeps the first line and the last few
+  of those.
 - Replaced the unmaintained `serde_yaml` 0.9 with `serde_yaml_ng` 0.10. No
   behaviour change — the schema, the error messages, and unknown-key rejection
   are identical.

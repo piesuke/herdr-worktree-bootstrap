@@ -77,3 +77,20 @@ enabled = true
 # [[hooks.post]]
 # command = ["npm", "run", "codegen"]
 # dir = "apps/web"
+
+# What happens to the worktree when the bootstrap aborts. Every failure writes a
+# full report (the failing command's own output, untruncated) and opens it in a
+# herdr pane — that part is not configurable. This only decides whether the
+# worktree survives.
+#
+# `remove` is the closest this plugin can get to "don't create the worktree if
+# the bootstrap fails": herdr fires plugin events *after* the worktree, its
+# workspace and its pane exist, so the only option is to undo them.
+#
+# It is destructive, and not the default for that reason: a bootstrap can run
+# for minutes, the pane is usable the whole time, and the removal is forced (it
+# has to be, or the half-written node_modules that caused the failure would
+# block it) — so anything you did in that window goes with it.
+[failure]
+# action = "keep"     # default: leave the half-bootstrapped worktree alone
+# action = "remove"   # take the worktree, its workspace and its pane back down

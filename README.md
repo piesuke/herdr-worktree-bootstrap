@@ -47,7 +47,11 @@ command = ["direnv", "allow"]
 - **Fail-fast** — the first non-zero exit aborts the run, instead of leaving you
   to discover it later.
 - **Tells you what it did** — a herdr toast when the worktree is ready, or when
-  the bootstrap aborted and why.
+  the bootstrap aborted and why, with the failing command's own output quoted.
+- **Shows you the whole error** — a failure also opens a scrollable pane with
+  the full report, because a toast is too small for a package manager's answer.
+- **Optionally cleans up after itself** — `[failure] action = "remove"` takes a
+  worktree that failed to bootstrap back out again.
 
 ## Table of contents
 
@@ -76,13 +80,16 @@ Herdr (worktree.created)
        ├─ copy           <repo>/<file>  ->  <worktree>/<file>
        ├─ install        detect package manager from lockfiles, install
        ├─ post hooks     commands run after copy + install
-       └─ notify         herdr toast: what ran, or what failed
+       ├─ notify         herdr toast: what ran, or what failed
+       └─ on failure     full report in a pane, and optionally a rollback
 ```
 
 Lifecycle order: **git update → pre → copy → install → post**. Any non-zero
 exit aborts the whole bootstrap (fail-fast). If a repo has no config file, the
 plugin does nothing. Whatever the outcome, the run ends with a toast — see
-[`[notify]`](#notify--announce-the-result) for the herdr setting it needs.
+[`[notify]`](#notify--announce-the-result) for the herdr setting it needs — and
+a failure additionally opens the
+[failure pane](#failure--what-happens-to-a-worktree-that-failed).
 
 ### Config format: TOML or YAML
 
@@ -401,7 +408,15 @@ Bootstrap done · worktree/green-harbor-ad23
 ```
 Bootstrap failed · worktree/green-harbor-ad23
   `pnpm install --frozen-lockfile` exited with exit status: 1
+  …
+  ERR_PNPM_ENOENT  Failed to create bin at …/node_modules/.bin/next:
+  ENOENT: no such file or directory
 ```
+
+A failure quotes what the command printed, not just its exit status — the exit
+status is the one thing you already knew. Only the ends survive the toast (the
+command at the top, the reason at the bottom); the whole thing is in the
+[failure pane](#failure--what-happens-to-a-worktree-that-failed).
 
 This is the **only section that is on by default**, because a half-bootstrapped
 worktree you were never told about is the failure this plugin is supposed to
@@ -438,6 +453,51 @@ A run where no phase was enabled (a repo with no config) never toasts, whatever
 > [notify] herdr did not show the toast (reason: busy)
 > ```
 
+### `[failure]` — what happens to a worktree that failed
+
+Every failure writes a **full report** — the branch, the worktree path, and the
+complete error chain including the failing command's output — and opens it in a
+herdr pane:
+
+```
+Bootstrap failed
+
+branch:   worktree/green-harbor-ad23
+worktree: /Users/you/.herdr/worktrees/app/worktree-green-harbor-ad23
+
+`pnpm install --frozen-lockfile` exited with exit status: 1
+Progress: resolved 576, reused 574, downloaded 0, added 0
+ERR_PNPM_ENOENT  Failed to create bin at …/node_modules/.bin/next: ENOENT: no such file or directory
+```
+
+The pane is a real terminal running `less`, so it scrolls and nothing is cut —
+press `q` to close it. The file stays behind either way, and its path is in
+[the logs](#3-read-the-logs):
+
+```
+[report] full failure report: ~/.local/state/herdr/plugins/piesuke.herdr.worktree.bootstrap/failure-worktree-green-harbor-ad23.log
+```
+
+The worktree itself is **kept** by default:
+
+```toml
+[failure]
+# action = "keep"     # default: leave the half-bootstrapped worktree alone
+# action = "remove"   # take the worktree, its workspace and its pane back down
+```
+
+`remove` is the closest this plugin can get to "don't create the worktree if
+the bootstrap fails". herdr fires plugin events *after* the worktree, workspace
+and pane already exist, and the event's exit code is not a veto — so the only
+option is to undo them, which is what `remove` does (it also deletes the branch,
+via a non-forcing `git branch -d` that refuses if you committed something).
+
+> **`remove` is destructive, which is why it is not the default.** A bootstrap
+> can run for minutes on a large repo, and the agent pane is usable the entire
+> time. The removal is forced — it has to be, or the half-written `node_modules`
+> that caused the failure would block it — so anything you typed or wrote in
+> that window goes with it.
+
 ## Project layout
 
 ```
@@ -452,7 +512,9 @@ A run where no phase was enabled (a repo with no config) never toasts, whatever
 │   ├── event.rs             # HERDR_PLUGIN_EVENT_JSON types
 │   ├── config.rs            # .herdr/worktree-bootstrap.toml types + loading
 │   ├── bootstrap.rs         # copy / install / hook execution
-│   └── notify.rs            # the end-of-run herdr toast
+│   ├── notify.rs            # the end-of-run herdr toast
+│   ├── report.rs            # the full failure report and the pane showing it
+│   └── rollback.rs          # `[failure] action = "remove"`
 └── tests/
     ├── common/mod.rs        # temp dirs and throwaway git repos
     ├── config_load.rs       # which config file wins; the examples still parse

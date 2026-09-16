@@ -23,6 +23,13 @@ pub struct Worktree {
 
 #[derive(Deserialize)]
 pub struct Workspace {
+    /// herdr's handle for this workspace (e.g. `wAK`), and the only thing
+    /// `herdr worktree remove` will accept to undo the creation.
+    ///
+    /// Optional even though herdr always sends it: a rollback that can't find
+    /// an id should say so and leave the worktree alone, not abort the parse
+    /// and take every successful bootstrap down with it.
+    pub workspace_id: Option<String>,
     /// Source worktree/repo this workspace was derived from.
     pub worktree: Option<SourceWorktree>,
 }

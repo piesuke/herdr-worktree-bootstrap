@@ -17,3 +17,20 @@ command = ["cargo", "build", "--release"]
 [[events]]
 on = "worktree.created"
 command = ["./target/release/herdr-worktree-init"]
+
+# Opened by the plugin when a bootstrap fails, on a report file whose path
+# arrives in $WORKTREE_BOOTSTRAP_REPORT. A toast — and herdr's own dialog —
+# truncates the line that says why it failed; a pane is a real terminal that
+# doesn't.
+#
+# `less` is what keeps the pane open and scrollable; the `cat` fallback is for a
+# machine without it, where a pane that closed instantly would read as a crash.
+[[panes]]
+id = "failure"
+title = "Bootstrap failure"
+placement = "overlay"
+command = [
+  "sh",
+  "-c",
+  'less -R -- "$WORKTREE_BOOTSTRAP_REPORT" || { cat -- "$WORKTREE_BOOTSTRAP_REPORT"; printf "\npress enter to close "; read _; }',
+]

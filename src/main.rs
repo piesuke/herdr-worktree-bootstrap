@@ -46,7 +46,6 @@ fn main() -> Result<()> {
     // failed bootstrap is the one the user hears about rather than the one
     // that vanishes into the captured log.
     let outcome = run(worktree, source.as_deref(), &config);
-    let branch = &event.data.worktree.branch;
     let toast = match &outcome {
         Ok(summary) => notify::toast_for(config.notify.when, branch, Outcome::Succeeded(summary)),
         Err(err) => notify::toast_for(config.notify.when, branch, Outcome::Failed(err)),

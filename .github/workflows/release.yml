@@ -97,7 +97,15 @@ jobs:
       # No binaries are attached on purpose: herdr installs from source and runs
       # the manifest's own `cargo build --release`, so a prebuilt artifact here
       # would be one nothing consumes.
-      - name: Create the release
+      #
+      # Why not `gh release create` alone: publishing a release from the GitHub
+      # UI creates the tag itself, so the tag push that triggers this workflow
+      # can arrive *after* the release already exists. `create` then fails with
+      # `Release.tag_name already exists` — and the release keeps GitHub's
+      # auto-generated "What's Changed" list, which is the changelog this job
+      # exists to replace. Edit the existing one instead, so the notes come from
+      # CHANGELOG.md whichever end the release was started from.
+      - name: Create or update the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -106,8 +114,16 @@ jobs:
           prerelease=""
           case "$version" in *-*) prerelease="--prerelease" ;; esac
 
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file release-notes.md \
-            --verify-tag \
-            $prerelease
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME exists — replacing its notes with CHANGELOG.md"
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file release-notes.md \
+              $prerelease
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file release-notes.md \
+              --verify-tag \
+              $prerelease
+          fi
